@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- Auto-generated via Perplexity on 2025-10-29T17:05:59.156004Z -->
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Personal Productivity Grid Planner</title>
+<style>
+  :root {
+    --color-bg: #fefefe;
+    --color-text: #222;
+    --color-border: #ccc;
+    --color-priority-low: #6c757d;
+    --color-priority-medium: #0d6efd;
+    --color-priority-high: #dc3545;
+    --color-highlight: #e7f1ff;
+    --color-current-day: #d0e7ff;
+    --color-focus: #80bdff;
+    --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+      Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    font-family: var(--font-family);
+    background: var(--color-bg);
+    color: var(--color-text);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+  header {
+    padding: 0.5rem 1rem;
+    background: #fff;
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    user-select: none;
+  }
+  header h1 {
+    font-weight: 600;
+    font-size: 1.25rem;
+    margin: 0;
+  }
+  button#clearAll {
+    background: var(--color-priority-high);
+    border: none;
+    color: white;
+    padding: 0.4rem 0.8rem;
+    border-radius: 0.25rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+  }
+  button#clearAll:hover,
+  button#clearAll:focus {
+    background: #b02a37;
+    outline: none;
+  }
+  main {
+    flex: 1 1 auto;
+    overflow: auto;
+    padding: 0.5rem;
+  }
+  .grid-container {
+    display: grid;
+    grid-template-columns: repeat(8, minmax(8rem, 1fr));
+    grid-template-rows: 2.5rem repeat(6, 6.5rem);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    user-select: none;
+  }
+  .header-cell {
+    background: #f5f5f5;
+    border-bottom: 1px solid var(--color-border);
+    border-right: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.875rem;
+    padding: 0 0.25rem;
+    text-align: center;
+  }
+  .header-cell:last-child {
+    border-right: none;
+  }
+  .time-label {
+    border-right: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
+    background: #fafafa;
+    font-size: 0.8rem;
+    color: #555;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0.25rem;
+  }
+  .cell {
+    border-bottom: 1px solid var(--color-border);
+    border-right: 1px solid var(--color-border);
+    position: relative;
+    background: white;
+    overflow-y: auto;
+    outline-offset: -2px;
+  }
+  .cell:last-child {
+    border-right: none;
+  }
+  .cell.current-day {
+    background: var(--color-current-day);
+  }
+  .cell:focus-within {
+    outline: 2px solid var(--color-focus);
+    outline-offset: -2px;
+  }
+  .tasks {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.2rem 0.15rem 0.15rem 0.15rem;
+  }
+  .task {
+    background: #e9ecef;
+    border-radius: 3px;
+    padding: 0.15rem 0.3rem 0.15rem 0.3rem;
+    font-size: 0.8rem;
+    cursor: grab;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.3rem;
+  }
+  .task[draggable="true"]:active {
+    cursor: grabbing;
+  }
+  .task.low {
+    border-left: 4px solid var(--color-priority-low);
+  }
+  .task.medium {
+    border-left: 4px solid var(--color-priority-medium);
+  }
+  .task.high {
+    border-left: 4px solid var(--color-priority-high);
+  }
+  .task-title {
+    flex: 1 1 auto;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .task-priority {
+    flex-shrink: 0;
+    font-weight: 700;
+    font-size: 0.75rem;
+    padding: 0 0.25rem;
+    border-radius: 2px;
+    color: white;
+    user-select: none;
+  }
+  .task-priority.low {
+    background-color: var(--color-priority-low);
+  }
+  .task-priority.medium {
+    background-color: var(--color-priority-medium);
+  }
+  .task-priority.high {
+    background-color: var(--color-priority-high);
+  }
+  .task-edit {
+    width: 100%;
+    font-size: 0.8rem;
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    padding: 0.1rem 0.25rem;
+    box-sizing: border-box;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 1.5rem;
+  }
+  .task-edit:focus {
+    outline-color: var(--color-focus);
+  }
+  .task-notes {
+    display: block;
+    font-size: 0.7rem;
+    color: #555;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-left: 0.3rem;
+  }
+  .task-controls {
+    display: flex;
+    gap: 0.15rem;
+    margin-left: 0.3rem;
+  }
+  .task-btn {
+    background: transparent;
+    border: none;
+    color: #888;
+    font-size: 1rem;
+    cursor: pointer;
+    user-select: none;
+    padding: 0 0.15rem;
+    line-height: 1;
+  }
+  .task-btn:hover,
+  .task-btn:focus {
+    color: var(--color-priority-high);
+    outline: none;
+  }
+  select.task-priority-select {
+    font-size: 0.8rem;
+    margin-left: 0.3rem;
+    border-radius: 3px;
+    border: 1px solid var(--color-border);
+    padding: 0 0.2rem;
+    background: white;
+    cursor: pointer;
+  }
+  /* Scrollbar for tasks container */
+  .tasks::-webkit-scrollbar {
+    width: 6px;
+  }
+  .tasks::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 3px;
+  }
+  /* Responsive: On narrow screens, stack days vertically */
+  @media (max-width: 600px) {
+    .grid-container {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto;
+      overflow-y: auto;
+      height: 100%;
+    }
+    .header-cell.day-header {
+      display: none;
+    }
+    .time-label {
+      display: none;
+    }
+    .cell {
+      border: 1px solid var(--color-border);
+      margin-bottom: 0.5rem;
+      border-radius: 4px;
+      min-height: 8rem;
+    }
+    .cell.current-day {
+      background: var(--color-current-day);
+    }
+    .cell > .day-label {
+      display: block;
+      font-weight: 600;
+      font-size: 1rem;
+      padding: 0.3rem 0.5rem;
+      border-bottom: 1px solid var(--color-border);
+      background: #f5f5f5;
+      user-select: none;
+    }
+    .tasks {
+      padding: 0.5rem;
+    }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Personal Productivity Grid Planner</h1>
+  <button id="clearAll" aria-label="Clear all tasks">Clear All</button>
+</header>
+<main>
+  <div id="grid" class="grid-container" role="grid" aria-label="7-day productivity planner grid"></div>
+</main>
+<script>
+(() => {
+  "use strict";
+
+  // Constants
+  const TIME_BLOCKS = [
+    "Morning",
+    "Late Morning",
+    "Afternoon",
+    "Early Evening",
+    "Evening",
+    "Night",
+  ];
+  const PRIORITIES = ["Low", "Medium", "High"];
+  const PRIORITY_CLASSES = ["low", "medium", "high"];
+  const STORAGE_KEY = "ppgp-tasks";
+
+  // Date utilities
+  function formatDateISO(date) {
+    return date.toISOString().slice(0, 10);
+  }
+  function formatDayShort(date) {
+    return date.toLocaleDateString(undefined, { weekday: "short" });
+  }
+  function formatMonthDay(date) {
+    return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+
+  // Get current date at midnight UTC (to avoid timezone issues)
+  const now = new Date();
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
+  // State
+  let tasks = {}; // key: cellId (YYYY-MM-DD|timeBlockIndex), value: array of task objects
+  // task object: {id:string, title:string, notes:string, priority:0|1|2}
+
+  // Drag state
+  let dragTask = null;
+  let dragSourceCellId = null;
+  let dragSourceTaskIndex = null;
+
+  // Focus state for keyboard navigation
+  let focusedCellIndex = 0;
+
+  // Elements
+  const grid = document.getElementById("grid");
+  const clearAllBtn = document.getElementById("clearAll");
+
+  // Compute the 7 days starting from today
+  function get7Days() {
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(today);
+      d.setUTCDate(d.getUTCDate() + i);
+      days.push(d);
+    }
+    return days;
+  }
+  const days = get7Days();
+
+  // Generate cellId: "YYYY-MM-DD|timeIndex"
+  function getCellId(date, timeIndex) {
+    return formatDateISO(date) + "|" + timeIndex;
+  }
+
+  // Save tasks to localStorage and update URL hash
+  function saveTasks() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    } catch {}
+    updateURLHash();
+  }
+
+  // Load tasks from localStorage or URL hash
+  function loadTasks() {
+    // Try URL hash first
+    if (window.location.hash.length > 1) {
+      try {
+        const decoded = decodeURIComponent(window.location.hash.slice(1));
+        const parsed = JSON.parse(atob(decoded));
+        if (typeof parsed === "object" && parsed !== null) {
+          tasks = parsed;
+          return;
+        }
+      } catch {}
+    }
+    // Fallback to localStorage
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (typeof parsed === "object" && parsed !== null) {
+          tasks = parsed;
+          return;
+        }
+      }
+    } catch {}
+    tasks = {};
+  }
+
+  // Update URL hash with base64 encoded JSON of tasks
+  function updateURLHash() {
+    try {
+      const encoded = btoa(JSON.stringify(tasks));
+      window.history.replaceState(
+        null,
+        "",
+        window.location.pathname + window.location.search + "#" + encodeURIComponent(encoded)
+      );
+    } catch {}
+  }
+
+  // Generate unique ID for tasks
+  function generateId() {
+    return "t" + Math.random().toString(36).slice(2, 10);
+  }
+
+  // Create grid header row: empty top-left cell + 7 day headers
+  function createGridHeader() {
+    // Top-left empty cell
+    const emptyHeader = document.createElement("div");
+    emptyHeader.className = "header-cell";
+    emptyHeader.setAttribute("aria-hidden", "true");
+    grid.appendChild(emptyHeader);
+
+    // Day headers
+    days.forEach((day, i) => {
+      const header = document.createElement("div");
+      header.className = "header-cell day-header";
+      header.textContent = `${formatDayShort(day)} ${formatMonthDay(day)}`;
+      header.setAttribute("role", "columnheader");
+      header.dataset.dayIndex = i;
+      if (i === 0) header.classList.add("current-day");
+      grid.appendChild(header);
+    });
+  }
+
+  // Create time labels column and cells grid
+  function createGridBody() {
+    // For each time block row, create time label + 7 cells
+    for (let timeIndex = 0; timeIndex < TIME_BLOCKS.length; timeIndex++) {
+      // Time label cell
+      const timeLabel = document.createElement("div");
+      timeLabel.className = "time-label";
+      timeLabel.textContent = TIME_BLOCKS[timeIndex];
+      timeLabel.setAttribute("aria-hidden", "true");
+      grid.appendChild(timeLabel);
+
+      // Cells for each day
+      days.forEach((day, dayIndex) => {
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        if (dayIndex === 0) cell.classList.add("current-day");
+        cell.setAttribute("role", "gridcell");
+        cell.setAttribute("tabindex", "-1");
+        cell.dataset.cellId = getCellId(day, timeIndex);
+        cell.dataset.dayIndex = dayIndex;
+        cell.dataset.timeIndex = timeIndex;
+        cell.setAttribute("aria-label", `${TIME_BLOCKS[timeIndex]}, ${formatDayShort(day)} ${formatMonthDay(day)}`);
+        // Container for tasks
+        const tasksContainer = document.createElement("div");
+        tasksContainer.className = "tasks";
+        cell.appendChild(tasksContainer);
+        grid.appendChild(cell);
+      });
+    }
+  }
+
+  // Render all tasks in the grid
+  function renderTasks() {
+    // Clear all tasks containers
+    grid.querySelectorAll(".tasks").forEach((container) => (container.innerHTML = ""));
+    // For each cellId in tasks, render tasks
+    Object.entries(tasks).forEach(([cellId, taskList]) => {
+      const cell = grid.querySelector(`.cell[data-cell-id="${cellId}"]`);
+      if (!cell) return;
+      const container = cell.querySelector(".tasks");
+      taskList.forEach((task, index) => {
+        const taskEl = createTaskElement(task, cellId, index);
+        container.appendChild(taskEl);
+      });
+    });
+  }
+
+  // Create a task DOM element
+  function createTaskElement(task, cellId, taskIndex) {
+    const taskEl = document.createElement("div");
+    taskEl.className = "task " + PRIORITY_CLASSES[task.priority];
+    taskEl.setAttribute("draggable", "true");
+    taskEl.setAttribute("tabindex", "-1");
+    taskEl.dataset.taskId = task.id;
+    taskEl.dataset.cellId = cellId;
+    taskEl.dataset.taskIndex = taskIndex;
+    taskEl.setAttribute("role", "button");
+    taskEl.setAttribute("aria-label", `Task: ${task.title}, priority ${PRIORITIES[task.priority]}`);
+
+    // Title span
+    const titleSpan = document.createElement("span");
+    titleSpan.className = "task-title";
+    titleSpan.textContent = task.title || "(No title)";
+    taskEl.appendChild(titleSpan);
+
+    // Priority tag
+    const priorityTag = document.createElement("span");
+    priorityTag.className = "task-priority " + PRIORITY_CLASSES[task.priority];
+    priorityTag.textContent = PRIORITIES[task.priority];
+    taskEl.appendChild(priorityTag);
+
+    // Drag events
+    taskEl.addEventListener("dragstart", (e) => {
+      dragTask = task;
+      dragSourceCellId = cellId;
+      dragSourceTaskIndex = taskIndex;
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", task.id);
+      // For Firefox compatibility
+      e.dataTransfer.setDragImage(taskEl, 10, 10);
+    });
+    taskEl.addEventListener("dragend", () => {
+      dragTask = null;
+      dragSourceCellId = null;
+      dragSourceTaskIndex = null;
+    });
+
+    // Click to edit
+    taskEl.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openTaskEditor(taskEl, cellId, taskIndex);
+    });
+
+    // Keyboard: Enter or Space opens editor
+    taskEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openTaskEditor(taskEl, cellId, taskIndex);
+      }
+      if (e.key === "Delete") {
+        e.preventDefault();
+        deleteTask(cellId, taskIndex);
+      }
+    });
+
+    return taskEl;
+  }
+
+  // Open inline editor for a task
+  function openTaskEditor(taskEl, cellId, taskIndex) {
+    const task = tasks[cellId][taskIndex];
+    if (!task) return;
+
+    // Prevent multiple editors
+    if (grid.querySelector(".task-editing")) return;
+
+    taskEl.classList.add("task-editing");
+    taskEl.innerHTML = "";
+
+    // Title input
+    const titleInput = document.createElement("input");
+    titleInput.type = "text";
+    titleInput.className = "task-edit";
+    titleInput.value = task.title;
+    titleInput.placeholder = "Title";
+    titleInput.setAttribute("aria-label", "Task title");
+    taskEl.appendChild(titleInput);
+
+    // Notes textarea
+    const notesInput = document.createElement("textarea");
+    notesInput.className = "task-edit";
+    notesInput.value = task.notes || "";
+    notesInput.placeholder = "Notes (optional)";
+    notesInput.rows = 2;
+    notesInput.setAttribute("aria-label", "Task notes");
+    taskEl.appendChild(notesInput);
+
+    // Priority select
+    const prioritySelect = document.createElement("select");
+    prioritySelect.className = "task-priority-select";
+    prioritySelect.setAttribute("aria-label", "Task priority");
+    PRIORITIES.forEach((p, i) => {
+      const option = document.createElement("option");
+      option.value = i;
+      option.textContent = p;
+      if (i === task.priority) option.selected = true;
+      prioritySelect.appendChild(option);
+    });
+    taskEl.appendChild(prioritySelect);
+
+    // Save and Cancel buttons container
+    const btnContainer = document.createElement("div");
+    btnContainer.style.marginTop = "0.2rem";
+    btnContainer.style.textAlign = "right";
+
+    // Save button
+    const saveBtn = document.createElement("button");
+    saveBtn.textContent = "Save";
+    saveBtn.type = "button";
+    saveBtn.style.marginRight = "0.3rem";
+    saveBtn.style.fontSize = "0.8rem";
+    saveBtn.style.cursor = "pointer";
+    saveBtn.addEventListener("click", () => {
+      saveEdit();
+    });
+    btnContainer.appendChild(saveBtn);
+
+    // Cancel button
+    const cancelBtn = document.createElement("button");
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.type = "button";
+    cancelBtn.style.fontSize = "0.8rem";
+    cancelBtn.style.cursor = "pointer";
+    cancelBtn.addEventListener("click", () => {
+      cancelEdit();
+    });
+    btnContainer.appendChild(cancelBtn);
+
+    taskEl.appendChild(btnContainer);
+
+    // Focus title input
+    titleInput.focus();
+
+    // Keyboard handling for inputs
+    function saveEdit() {
+      const newTitle = titleInput.value.trim();
+      if (!newTitle) {
+        alert("Task title cannot be empty.");
+        titleInput.focus();
+        return;
+      }
+      task.title = newTitle;
+      task.notes = notesInput.value.trim();
+      task.priority = Number(prioritySelect.value);
+      tasks[cellId][taskIndex] = task;
+      saveTasks();
+      renderTasks();
+      focusCell(cellId);
+    }
+    function cancelEdit() {
+      renderTasks();
+      focusCell(cellId);
+    }
+
+    // Keyboard shortcuts
+    [titleInput, notesInput, prioritySelect].forEach((input) => {
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          saveEdit();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          cancelEdit();
+        }
+      });
+    });
+  }
+
+  // Add new task to a cell
+  function addTask(cellId) {
+    if (!tasks[cellId]) tasks[cellId] = [];
+    const newTask = {
+      id: generateId(),
+      title: "",
+      notes: "",
+      priority: 1,
+    };
+    tasks[cellId].push(newTask);
+    saveTasks();
+    renderTasks();
+    // Open editor on new task
+    const cell = grid.querySelector(`.cell[data-cell-id="${cellId}"]`);
+    if (!cell) return;
+    const taskEls = cell.querySelectorAll(".task");
+    if (taskEls.length === 0) return;
+    openTaskEditor(taskEls[taskEls.length - 1], cellId, tasks[cellId].length - 1);
+  }
+
+  // Delete a task
+  function deleteTask(cellId, taskIndex) {
+    if (!tasks[cellId]) return;
+    tasks[cellId].splice(taskIndex, 1);
+    if (tasks[cellId].length === 0) delete tasks[cellId];
+    saveTasks();
+    renderTasks();
+  }
+
+  // Focus a cell by cellId
+  function focusCell(cellId) {
+    const cell = grid.querySelector(`.cell[data-cell-id="${cellId}"]`);
+    if (!cell) return;
+    // Focus first task if exists, else cell itself
+    const firstTask = cell.querySelector(".task");
+    if (firstTask) {
+      firstTask.focus();
+    } else {
+      cell.focus();
+    }
+  }
+
+  // Focus cell by dayIndex and timeIndex
+  function focusCellByIndex(dayIndex, timeIndex) {
+    if (dayIndex < 0) dayIndex = 0;
+    if (dayIndex >= days.length) dayIndex = days.length - 1;
+    if (timeIndex < 0) timeIndex = 0;
+    if (timeIndex >= TIME_BLOCKS.length) timeIndex = TIME_BLOCKS.length - 1;
+    const cellId = getCellId(days[dayIndex], timeIndex);
+    focusCell(cellId);
+  }
+
+  // Keyboard navigation between cells
+  function handleGridKeyDown(e) {
+    const active = document.activeElement;
+    if (!active) return;
+    if (!active.classList.contains("task") && !active.classList.contains("cell")) return;
+
+    // Find cellId and indices
+    let cellId = null;
+    let dayIndex = -1;
+    let timeIndex = -1;
+    if (active.classList.contains("task")) {
+      cellId = active.dataset.cellId;
+    } else if (active.classList.contains("cell")) {
+      cellId = active.dataset.cellId;
+    }
+    if (!cellId) return;
+    const [dateStr, timeStr] = cellId.split("|");
+    dayIndex = days.findIndex((d) => formatDateISO(d) === dateStr);
+    timeIndex = Number(timeStr);
+    if (dayIndex === -1 || isNaN(timeIndex)) return;
+
+    switch (e.key) {
+      case "ArrowRight":
+        e.preventDefault();
+        focusCellByIndex(dayIndex + 1, timeIndex);
+        break;
+      case "ArrowLeft":
+        e.preventDefault();
+        focusCellByIndex(dayIndex - 1, timeIndex);
+        break;
+      case "ArrowDown":
+        e.preventDefault();
+        focusCellByIndex(dayIndex, timeIndex + 1);
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        focusCellByIndex(dayIndex, timeIndex - 1);
+        break;
+      case "Delete":
+        e.preventDefault();
+        if (active.classList.contains("task")) {
+          const tIndex = Number(active.dataset.taskIndex);
+          deleteTask(cellId, tIndex);
+          // Focus cell after deletion
+          focusCell(cellId);
+        }
+        break;
+      case "Enter":
+      case " ":
+        e.preventDefault();
+        if (active.classList.contains("task")) {
+          const tIndex = Number(active.dataset.taskIndex);
+          openTaskEditor(active, cellId, tIndex);
+        } else if (active.classList.contains("cell")) {
+          // Add new task on empty cell
+          addTask(cellId);
+        }
+        break;
+    }
+  }
+
+  // Drag and drop handlers for cells
+  function addDragDropHandlers(cell) {
+    cell.addEventListener("dragover", (e) => {
+      if (dragTask) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        cell.classList.add("drag-over");
+      }
+    });
+    cell.addEventListener("dragleave", () => {
+      cell.classList.remove("drag-over");
+    });
+    cell.addEventListener("drop", (e) => {
+      e.preventDefault();
+      cell.classList.remove("drag-over");
+      if (!dragTask) return;
+      const targetCellId = cell.dataset.cellId;
+      if (!targetCellId) return;
+      // Remove from source
+      if (
+        dragSourceCellId !== null &&
+        dragSourceTaskIndex !== null &&
+        tasks[dragSourceCellId] &&
+        tasks[dragSourceCellId][dragSourceTaskIndex] &&
+        tasks[dragSourceCellId][dragSourceTaskIndex].id === dragTask.id
+      ) {
+        tasks[dragSourceCellId].splice(dragSourceTaskIndex, 1);
+        if (tasks[dragSourceCellId].length === 0) delete tasks[dragSourceCellId];
+      }
+      // Add to target end
+      if (!tasks[targetCellId]) tasks[targetCellId] = [];
+      tasks[targetCellId].push(dragTask);
+      saveTasks();
+      renderTasks();
+      focusCell(targetCellId);
+      dragTask = null;
+      dragSourceCellId = null;
+      dragSourceTaskIndex = null;
+    });
+  }
+
+  // Initialize grid and event listeners
+  function init() {
+    loadTasks();
+    createGridHeader();
+    createGridBody();
+    renderTasks();
+
+    // Add drag/drop handlers to cells
+    grid.querySelectorAll(".cell").forEach(addDragDropHandlers);
+
+    // Keyboard navigation on grid container
+    grid.addEventListener("keydown", handleGridKeyDown);
+
+    // Make cells focusable and clickable to add tasks
+    grid.querySelectorAll(".cell").forEach((cell) => {
+      cell.setAttribute("tabindex", "0");
+      cell.addEventListener("click", () => {
+        addTask(cell.dataset.cellId);
+      });
+      cell.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          addTask(cell.dataset.cellId);
+        }
+      });
+    });
+
+    // Clear all button
+    clearAllBtn.addEventListener("click", () => {
+      if (confirm("Clear all tasks? This action cannot be undone.")) {
+        tasks = {};
+        saveTasks();
+        renderTasks();
+        // Focus first cell
+        focusCellByIndex(0, 0);
+      }
+    });
+
+    // Focus first cell on load
+    focusCellByIndex(0, 0);
+  }
+
+  // Run init on DOMContentLoaded
+  window.addEventListener("DOMContentLoaded", init);
+})();
+</script>
+</body>
+</html>

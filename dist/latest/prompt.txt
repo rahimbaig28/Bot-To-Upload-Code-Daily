@@ -1,0 +1,16 @@
+Personal Productivity Grid Planner
+
+- Single-file web app (one HTML file with inline CSS and JavaScript; no external libraries).
+- Displays a responsive grid calendar view representing the upcoming 7 days horizontally and 6 time blocks vertically per day (e.g., Morning, Late Morning, Afternoon, Early Evening, Evening, Night).
+- Users can add, edit, or delete personal tasks/events in each grid cell.
+- Tasks are draggable and droppable across grid cells to reschedule or reorder.
+- Each task includes title, optional notes, and a priority tag (Low, Medium, High).
+- Supports inline editing of tasks by clicking; pressing Enter saves and Esc cancels.
+- Saves all data persistently in localStorage to keep state across sessions.
+- Supports sharing the current grid’s state via URL hash encoding, allowing users to copy the URL and open it elsewhere to restore tasks.
+- Keyboard accessibility: arrow keys move focus between grid cells; Enter or Space opens task edit; Delete key removes focused task.
+- Mobile-friendly: grid adapts to narrow screens with vertical stacking and scroll.
+- Includes a “Clear All” button to reset the planner.
+- Minimal, clean UI with subtle highlight on the current day’s column.
+- On load, defaults to current date in the leftmost column, with horizontal scrolling possible for future days.
+- No external dependencies or frameworks; all code contained in a single HTML file under 1000 lines.
