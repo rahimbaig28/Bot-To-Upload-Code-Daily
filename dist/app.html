@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- Auto-generated via Perplexity on 2025-10-29T16:33:16.138633Z -->
+
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dynamic Time Series Explorer</title>
+<style>
+  :root {
+    --bg: #fff;
+    --fg: #222;
+    --accent: #007acc;
+    --accent-light: #cce6ff;
+    --border: #ccc;
+    --error: #d9534f;
+    --success: #5cb85c;
+    --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+      Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    font-family: var(--font-family);
+    background: var(--bg);
+    color: var(--fg);
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+  header {
+    padding: 1rem;
+    background: var(--accent);
+    color: white;
+    text-align: center;
+    font-weight: 600;
+    font-size: 1.25rem;
+  }
+  main {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    padding: 0.5rem 1rem 1rem 1rem;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    align-items: center;
+  }
+  label {
+    flex: 1 0 120px;
+    min-width: 120px;
+  }
+  input[type="datetime-local"],
+  input[type="number"],
+  textarea {
+    flex: 2 1 200px;
+    padding: 0.3rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-size: 1rem;
+  }
+  textarea {
+    resize: vertical;
+    min-height: 4rem;
+    font-family: var(--font-family);
+  }
+  button, .btn {
+    background: var(--accent);
+    border: none;
+    color: white;
+    padding: 0.4rem 0.75rem;
+    font-size: 1rem;
+    border-radius: 3px;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s ease;
+  }
+  button:focus, .btn:focus {
+    outline: 3px solid #005a9e;
+    outline-offset: 2px;
+  }
+  button:hover, .btn:hover {
+    background: #005a9e;
+  }
+  button[disabled], .btn[disabled] {
+    background: var(--border);
+    cursor: default;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  #chart-container {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 300px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-bottom: 1rem;
+  }
+  canvas {
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 0.3rem 0.5rem;
+    text-align: left;
+  }
+  th {
+    background: var(--accent-light);
+  }
+  td input {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 0.9rem;
+    padding: 0.15rem 0.3rem;
+    border: 1px solid transparent;
+    border-radius: 2px;
+  }
+  td input:focus {
+    border-color: var(--accent);
+    outline: none;
+  }
+  .sr-only {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    border: 0 !important;
+  }
+  #message {
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+  }
+  @media (max-width: 600px) {
+    form {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    label {
+      flex: none;
+      min-width: auto;
+      margin-bottom: 0.2rem;
+    }
+    input[type="datetime-local"],
+    input[type="number"],
+    textarea {
+      flex: none;
+      width: 100%;
+    }
+    .controls {
+      flex-direction: column;
+    }
+  }
+</style>
+</head>
+<body>
+<header role="banner">Dynamic Time Series Explorer</header>
+<main role="main">
+  <section aria-label="Data input and upload">
+    <form id="add-point-form" aria-describedby="form-desc">
+      <div id="form-desc" class="sr-only">Add a new data point with timestamp and numeric value</div>
+      <label for="input-timestamp">Timestamp</label>
+      <input type="datetime-local" id="input-timestamp" name="timestamp" required aria-required="true" aria-describedby="timestamp-desc" />
+      <span id="timestamp-desc" class="sr-only">Enter date and time for the data point</span>
+
+      <label for="input-value">Value</label>
+      <input type="number" id="input-value" name="value" required aria-required="true" step="any" aria-describedby="value-desc" />
+      <span id="value-desc" class="sr-only">Enter numeric value for the data point</span>
+
+      <button type="submit" aria-label="Add data point">Add</button>
+    </form>
+    <label for="csv-input">Paste CSV data (timestamp,value) below:</label>
+    <textarea id="csv-input" aria-describedby="csv-desc" placeholder="2025-10-29T16:00,100&#10;2025-10-29T17:00,120"></textarea>
+    <div id="csv-desc" class="sr-only">Paste CSV data with each line containing timestamp and numeric value separated by comma</div>
+    <button id="csv-import-btn" class="btn" aria-label="Import CSV data">Import CSV</button>
+  </section>
+
+  <section aria-label="Time series chart and controls" style="flex:1 1 auto; display:flex; flex-direction: column;">
+    <div id="chart-container" role="region" aria-label="Time series line chart" tabindex="0">
+      <canvas id="chart" aria-live="polite" aria-atomic="true"></canvas>
+    </div>
+    <div class="controls" role="group" aria-label="Chart and data controls">
+      <button id="undo-btn" class="btn" aria-label="Undo last change" disabled>Undo</button>
+      <button id="redo-btn" class="btn" aria-label="Redo last undone change" disabled>Redo</button>
+      <button id="reset-btn" class="btn" aria-label="Reset all data">Reset</button>
+      <button id="zoom-in-btn" class="btn" aria-label="Zoom in chart">Zoom In</button>
+      <button id="zoom-out-btn" class="btn" aria-label="Zoom out chart">Zoom Out</button>
+      <button id="pan-left-btn" class="btn" aria-label="Pan chart left">Pan Left</button>
+      <button id="pan-right-btn" class="btn" aria-label="Pan chart right">Pan Right</button>
+    </div>
+  </section>
+
+  <section aria-label="Data points table">
+    <h2>Data Points</h2>
+    <table id="data-table" aria-describedby="table-desc" role="grid" tabindex="0">
+      <caption id="table-desc">Editable table of time series data points with timestamp and value columns</caption>
+      <thead>
+        <tr>
+          <th scope="col">Timestamp</th>
+          <th scope="col">Value</th>
+          <th scope="col">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Data rows inserted here -->
+      </tbody>
+    </table>
+  </section>
+  <div id="message" role="alert" aria-live="assertive"></div>
+</main>
+
+<script>
+(() => {
+  "use strict";
+
+  // Utilities
+  function parseISODateTimeLocal(s) {
+    // Parse datetime-local input string to Date object (local time)
+    // datetime-local format: "YYYY-MM-DDTHH:mm"
+    // Return null if invalid
+    const d = new Date(s);
+    return isNaN(d) ? null : d;
+  }
+  function formatISODateTimeLocal(d) {
+    // Format Date object to "YYYY-MM-DDTHH:mm" for datetime-local input
+    if (!(d instanceof Date)) return "";
+    const pad = (n) => (n < 10 ? "0" + n : n);
+    return (
+      d.getFullYear() +
+      "-" +
+      pad(d.getMonth() + 1) +
+      "-" +
+      pad(d.getDate()) +
+      "T" +
+      pad(d.getHours()) +
+      ":" +
+      pad(d.getMinutes())
+    );
+  }
+  function formatDateTimeForDisplay(d) {
+    // Format Date object for table display: YYYY-MM-DD HH:mm:ss
+    if (!(d instanceof Date)) return "";
+    const pad = (n) => (n < 10 ? "0" + n : n);
+    return (
+      d.getFullYear() +
+      "-" +
+      pad(d.getMonth() + 1) +
+      "-" +
+      pad(d.getDate()) +
+      " " +
+      pad(d.getHours()) +
+      ":" +
+      pad(d.getMinutes()) +
+      ":" +
+      pad(d.getSeconds())
+    );
+  }
+  function clamp(value, min, max) {
+    return value < min ? min : value > max ? max : value;
+  }
+
+  // Data Model and Persistence
+  const STORAGE_KEY = "dts_explorer_data";
+  const STORAGE_VIEW = "dts_explorer_viewstate";
+  const UNDO_LIMIT = 20;
+
+  let dataPoints = []; // Array of {id, timestamp:Date, value:number}
+  let undoStack = [];
+  let redoStack = [];
+
+  // View state for zoom/pan
+  let viewState = {
+    // time axis range in ms (timestamps)
+    timeMin: null,
+    timeMax: null,
+    // value axis range
+    valueMin: null,
+    valueMax: null,
+  };
+
+  // Generate unique id for points
+  function genId() {
+    return (
+      "id" +
+      Math.random()
+        .toString(36)
+        .substr(2, 9) +
+      Date.now().toString(36)
+    );
+  }
+
+  // Save data and view state to localStorage
+  function saveState() {
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(
+          dataPoints.map((p) => ({
+            id: p.id,
+            timestamp: p.timestamp.toISOString(),
+            value: p.value,
+          }))
+        )
+      );
+      localStorage.setItem(STORAGE_VIEW, JSON.stringify(viewState));
+    } catch (e) {
+      // ignore quota errors
+    }
+  }
+  // Load data and view state from localStorage
+  function loadState() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const arr = JSON.parse(raw);
+        dataPoints = arr
+          .map((p) => {
+            const t = new Date(p.timestamp);
+            if (isNaN(t)) return null;
+            return { id: p.id || genId(), timestamp: t, value: Number(p.value) };
+          })
+          .filter((p) => p !== null)
+          .sort((a, b) => a.timestamp - b.timestamp);
+      } else {
+        dataPoints = [];
+      }
+      const rawView = localStorage.getItem(STORAGE_VIEW);
+      if (rawView) {
+        const v = JSON.parse(rawView);
+        if (
+          v &&
+          typeof v.timeMin === "number" &&
+          typeof v.timeMax === "number" &&
+          typeof v.valueMin === "number" &&
+          typeof v.valueMax === "number"
+        ) {
+          viewState = v;
+        } else {
+          viewState = {};
+        }
+      } else {
+        viewState = {};
+      }
+    } catch (e) {
+      dataPoints = [];
+      viewState = {};
+    }
+  }
+
+  // Undo/Redo Management
+  function pushUndo() {
+    // Save current dataPoints snapshot for undo
+    undoStack.push(
+      JSON.stringify(
+        dataPoints.map((p) => ({
+          id: p.id,
+          timestamp: p.timestamp.toISOString(),
+          value: p.value,
+        }))
+      )
+    );
+    if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+    redoStack = [];
+    updateUndoRedoButtons();
+  }
+  function undo() {
+    if (undoStack.length === 0) return;
+    redoStack.push(
+      JSON.stringify(
+        dataPoints.map((p) => ({
+          id: p.id,
+          timestamp: p.timestamp.toISOString(),
+          value: p.value,
+        }))
+      )
+    );
+    const last = undoStack.pop();
+    dataPoints = JSON.parse(last).map((p) => ({
+      id: p.id,
+      timestamp: new Date(p.timestamp),
+      value: p.value,
+    }));
+    dataPoints.sort((a, b) => a.timestamp - b.timestamp);
+    updateUndoRedoButtons();
+    saveState();
+    refreshAll();
+  }
+  function redo() {
+    if (redoStack.length === 0) return;
+    pushUndo();
+    const next = redoStack.pop();
+    dataPoints = JSON.parse(next).map((p) => ({
+      id: p.id,
+      timestamp: new Date(p.timestamp),
+      value: p.value,
+    }));
+    dataPoints.sort((a, b) => a.timestamp - b.timestamp);
+    updateUndoRedoButtons();
+    saveState();
+    refreshAll();
+  }
+  function updateUndoRedoButtons() {
+    undoBtn.disabled = undoStack.length === 0;
+    redoBtn.disabled = redoStack.length === 0;
+  }
+
+  // Reset all data and state
+  function resetAll() {
+    if (!confirm("Are you sure you want to reset all data? This cannot be undone.")) return;
+    pushUndo();
+    dataPoints = [];
+    viewState = {};
+    undoStack = [];
+    redoStack = [];
+    updateUndoRedoButtons();
+    saveState();
+    refreshAll();
+  }
+
+  // Chart Implementation (Canvas 2D)
+  const chartCanvas = document.getElementById("chart");
+  const ctx = chartCanvas.getContext("2d");
+  let chartWidth, chartHeight, dpr;
+  const margin = { top: 30, right: 50, bottom: 50, left: 70 };
+
+  // Axis label fonts
+  const fontAxis = "12px Arial, sans-serif";
+  const fontLegend = "14px Arial, sans-serif";
+
+  // Chart interaction state
+  let isDraggingPoint = false;
+  let dragPointId = null;
+  let dragStartPos = null;
+  let dragStartValue = null;
+  let dragStartTimestamp = null;
+
+  // Zoom/pan parameters
+  const ZOOM_FACTOR = 1.3;
+  const PAN_FACTOR = 0.2; // fraction of visible range
+
+  // Keyboard navigation state
+  let focusedPointIndex = -1;
+
+  // Accessibility live region for chart updates
+  const chartContainer = document.getElementById("chart-container");
+
+  // Resize canvas to container size and device pixel ratio
+  function resizeCanvas() {
+    const rect = chartContainer.getBoundingClientRect();
+    dpr = window.devicePixelRatio || 1;
+    chartWidth = rect.width;
+    chartHeight = rect.height;
+    chartCanvas.width = chartWidth * dpr;
+    chartCanvas.height = chartHeight * dpr;
+    chartCanvas.style.width = chartWidth + "px";
+    chartCanvas.style.height = chartHeight + "px";
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(dpr, dpr);
+  }
+
+  // Compute view ranges from data or use saved viewState
+  function computeViewRanges() {
+    if (dataPoints.length === 0) {
+      // Default ranges
+      const now = Date.now();
+      viewState.timeMin = now - 3600 * 1000;
+      viewState.timeMax = now;
+      viewState.valueMin = 0;
+      viewState.valueMax = 10;
+      return;
+    }
+    if (
+      typeof viewState.timeMin !== "number" ||
+      typeof viewState.timeMax !== "number" ||
+      viewState.timeMin >= viewState.timeMax
+    ) {
+      viewState.timeMin = dataPoints.timestamp.getTime();
+      viewState.timeMax = dataPoints[dataPoints.length - 1].timestamp.getTime();
+      if (viewState.timeMin === viewState.timeMax) {
+        viewState.timeMax = viewState.timeMin + 60000; // +1 min
+      }
+    }
+    if (
+      typeof viewState.valueMin !== "number" ||
+      typeof viewState.valueMax !== "number" ||
+      viewState.valueMin >= viewState.valueMax
+    ) {
+      let minVal = dataPoints.value;
+      let maxVal = dataPoints.value;
+      for (const p of dataPoints) {
+        if (p.value < minVal) minVal = p.value;
+        if (p.value > maxVal) maxVal = p.value;
+      }
+      if (minVal === maxVal) {
+        maxVal = minVal + 1;
+      }
+      viewState.valueMin = minVal;
+      viewState.valueMax = maxVal;
+    }
+  }
+
+  // Convert timestamp (ms) to canvas X coordinate
+  function timeToX(t) {
+    return (
+      margin.left +
+      ((t - viewState.timeMin) / (viewState.timeMax - viewState.timeMin)) *
+        (chartWidth - margin.left - margin.right)
+    );
+  }
+  // Convert value to canvas Y coordinate
+  function valueToY(v) {
+    return (
+      margin.top +
+      ((viewState.valueMax - v) / (viewState.valueMax - viewState.valueMin)) *
+        (chartHeight - margin.top - margin.bottom)
+    );
+  }
+  // Inverse X to timestamp
+  function xToTime(x) {
+    return (
+      viewState.timeMin +
+      ((x - margin.left) / (chartWidth - margin.left - margin.right)) *
+        (viewState.timeMax - viewState.timeMin)
+    );
+  }
+  // Inverse Y to value
+  function yToValue(y) {
+    return (
+      viewState.valueMax -
+      ((y - margin.top) / (chartHeight - margin.top - margin.bottom)) *
+        (viewState.valueMax - viewState.valueMin)
+    );
+  }
+
+  // Draw chart axes, grid, labels, line, points, legend
+  function drawChart() {
+    ctx.clearRect(0, 0, chartWidth, chartHeight);
+    ctx.font = fontAxis;
+    ctx.fillStyle = varColorText;
+    ctx.strokeStyle = varColorGrid;
+    ctx.lineWidth = 1;
+
+    // Background
+    ctx.fillStyle = varColorBg;
+    ctx.fillRect(0, 0, chartWidth, chartHeight);
+
+    // Draw grid lines and ticks
+    drawGrid();
+
+    // Draw line connecting points
+    drawLine();
+
+    // Draw points
+    drawPoints();
+
+    // Draw axes labels
+    drawAxesLabels();
+
+    // Draw legend
+    drawLegend();
+  }
+
+  // Colors for chart elements
+  const varColorBg = "#fff";
+  const varColorGrid = "#ddd";
+  const varColorAxis = "#444";
+  const varColorText = "#222";
+  const varColorLine = "#007acc";
+  const varColorPoint = "#007acc";
+  const varColorPointHover = "#d9534f";
+  const varColorPointSelected = "#5cb85c";
+
+  // Draw grid lines and ticks on axes
+  function drawGrid() {
+    ctx.strokeStyle = varColorGrid;
+    ctx.fillStyle = varColorText;
+    ctx.lineWidth = 1;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+
+    // Horizontal grid lines and Y axis ticks
+    const yTicks = 5;
+    for (let i = 0; i <= yTicks; i++) {
+      const y = margin.top + ((chartHeight - margin.top - margin.bottom) * i) / yTicks;
+      ctx.beginPath();
+      ctx.moveTo(margin.left, y);
+      ctx.lineTo(chartWidth - margin.right, y);
+      ctx.stroke();
+
+      // Y axis labels
+      const val = viewState.valueMax - (i / yTicks) * (viewState.valueMax - viewState.valueMin);
+      ctx.fillText(val.toFixed(2), margin.left - 10, y + 2);
+    }
+
+    // Vertical grid lines and X axis ticks (time)
+    const xTicks = 6;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    for (let i = 0; i <= xTicks; i++) {
+      const x = margin.left + ((chartWidth - margin.left - margin.right) * i) / xTicks;
+      ctx.beginPath();
+      ctx.moveTo(x, margin.top);
+      ctx.lineTo(x, chartHeight - margin.bottom);
+      ctx.stroke();
+
+      // X axis labels - format date/time
+      const t = viewState.timeMin + (i / xTicks) * (viewState.timeMax - viewState.timeMin);
+      const dt = new Date(t);
+      const label = dt.toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      ctx.fillText(label, x, chartHeight - margin.bottom + 5);
+    }
+
+    // Draw axes lines
+    ctx.strokeStyle = varColorAxis;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    // Y axis
+    ctx.moveTo(margin.left, margin.top);
+    ctx.lineTo(margin.left, chartHeight - margin.bottom);
+    // X axis
+    ctx.lineTo(chartWidth - margin.right, chartHeight - margin.bottom);
+    ctx.stroke();
+  }
+
+  // Draw line connecting data points
+  function drawLine() {
+    if (dataPoints.length < 2) return;
+    ctx.strokeStyle = varColorLine;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < dataPoints.length; i++) {
+      const p = dataPoints[i];
+      const x = timeToX(p.timestamp.getTime());
+      const y = valueToY(p.value);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  // Draw data points as circles
+  function drawPoints() {
+    ctx.lineWidth = 1;
+    for (let i = 0; i < dataPoints.length; i++) {
+      const p = dataPoints[i];
+      const x = timeToX(p.timestamp.getTime());
+      const y = valueToY(p.value);
+      ctx.beginPath();
+      ctx.fillStyle = varColorPoint;
+      ctx.strokeStyle = varColorAxis;
+      ctx.lineWidth = 1;
+      ctx.arc(x, y, 5, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.stroke();
+      // Highlight focused point
+      if (i === focusedPointIndex) {
+        ctx.beginPath();
+        ctx.strokeStyle = varColorPointSelected;
+        ctx.lineWidth = 3;
+        ctx.arc(x, y, 7, 0, 2 * Math.PI);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Draw axes labels
+  function drawAxesLabels() {
+    ctx.fillStyle = varColorText;
+    ctx.font = "bold 14px Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.fillText("Time", margin.left + (chartWidth - margin.left - margin.right) / 2, chartHeight - 10);
+
+    ctx.save();
+    ctx.translate(15, margin.top + (chartHeight - margin.top - margin.bottom) / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText("Value", 0, 0);
+    ctx.restore();
+  }
+
+  // Draw legend
+  function drawLegend() {
+    const legendX = chartWidth - margin.right + 5;
+    const legendY = margin.top;
+    ctx.fillStyle = varColorPoint;
+    ctx.strokeStyle = varColorAxis;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(legendX + 7, legendY + 7, 5, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = varColorText;
+    ctx.font = fontLegend;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText("Data Point", legendX + 20, legendY + 7);
+  }
+
+  // Find data point under mouse (within radius)
+  function findPointAt(x, y) {
+    const radius = 7;
+    for (let i = 0; i < dataPoints.length; i++) {
+      const p = dataPoints[i];
+      const px = timeToX(p.timestamp.getTime());
+      const py = valueToY(p.value);
+      const dx = px - x;
+      const dy = py - y;
+      if (dx * dx + dy * dy <= radius * radius) return i;
+    }
+    return -1;
+  }
+
+  // Refresh all UI: chart and table
+  function refreshAll() {
+    computeViewRanges();
+    drawChart();
+    renderTable();
+    updateUndoRedoButtons();
+  }
+
+  // Data Table rendering and editing
+  const dataTableBody = document.querySelector("#data-table tbody");
+
+  function renderTable() {
+    dataTableBody.innerHTML = "";
+    dataPoints.forEach((p, i) => {
+      const tr = document.createElement("tr");
+      tr.setAttribute("role", "row");
+      // Timestamp cell
+      const tdTimestamp = document.createElement("td");
+      tdTimestamp.setAttribute("role", "gridcell");
+      const inputTimestamp = document.createElement("input");
+      inputTimestamp.type = "datetime-local";
+      inputTimestamp.value = formatISODateTimeLocal(p.timestamp);
+      inputTimestamp.setAttribute("aria-label", `Timestamp for data point ${i + 1}`);
+      inputTimestamp.addEventListener("change", (e) => {
+        const newDate = parseISODateTimeLocal(e.target.value);
+        if (newDate) {
+          pushUndo();
+          p.timestamp = newDate;
+          dataPoints.sort((a, b) => a.timestamp - b.timestamp);
+          saveState();
+          refreshAll();
+          announce(`Timestamp updated for data point ${i + 1}`);
+        } else {
+          e.target.value = formatISODateTimeLocal(p.timestamp);
+          announce(`Invalid timestamp entered for data point ${i + 1}`);
+        }
+      });
+      tdTimestamp.appendChild(inputTimestamp);
+      tr.appendChild(tdTimestamp);
+
+      // Value cell
+      const tdValue = document.createElement("td");
+      tdValue.setAttribute("role", "gridcell");
+      const inputValue = document.createElement("input");
+      inputValue.type = "number";
+      inputValue.step = "any";
+      inputValue.value = p.value;
+      inputValue.setAttribute("aria-label", `Value for data point ${i + 1}`);
+      inputValue.addEventListener("change", (e) => {
+        const v = Number(e.target.value);
+        if (!isNaN(v)) {
+          pushUndo();
+          p.value = v;
+          saveState();
+          refreshAll();
+          announce(`Value updated for data point ${i + 1}`);
+        } else {
+          e.target.value = p.value;
+          announce(`Invalid value entered for data point ${i + 1}`);
+        }
+      });
+      tdValue.appendChild(inputValue);
+      tr.appendChild(tdValue);
+
+      // Actions cell (delete)
+      const tdActions = document.createElement("td");
+      tdActions.setAttribute("role", "gridcell");
+      const delBtn = document.createElement("button");
+      delBtn.textContent = "Delete";
+      delBtn.className = "btn";
+      delBtn.setAttribute("aria-label", `Delete data point ${i + 1}`);
+      delBtn.addEventListener("click", () => {
+        pushUndo();
+        dataPoints.splice(i, 1);
+        saveState();
+        refreshAll();
+        announce(`Deleted data point ${i + 1}`);
+      });
+      tdActions.appendChild(delBtn);
+      tr.appendChild(tdActions);
+
+      dataTableBody.appendChild(tr);
+    });
+  }
+
+  // Announce messages for screen readers
+  const messageEl = document.getElementById("message");
+  let announceTimeout = null;
+  function announce(msg) {
+    if (announceTimeout) clearTimeout(announceTimeout);
+    messageEl.textContent = msg;
+    announceTimeout = setTimeout(() => {
+      messageEl.textContent = "";
+    }, 4000);
+  }
+
+  // Add new data point from form
+  const addPointForm = document.getElementById("add-point-form");
+  addPointForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const tsInput = addPointForm.timestamp.value;
+    const valInput = addPointForm.value.value;
+    const ts = parseISODateTimeLocal(tsInput);
+    const val = Number(valInput);
+    if (!ts) {
+      announce("Invalid timestamp");
+      return;
+    }
+    if (isNaN(val)) {
+      announce("Invalid value");
+      return;
+    }
+    pushUndo();
+    dataPoints.push({ id: genId(), timestamp: ts, value: val });
+    dataPoints.sort((a, b) => a.timestamp - b.timestamp);
+    saveState();
+    refreshAll();
+    addPointForm.reset();
+    addPointForm.timestamp.focus();
+    announce("Added new data point");
+  });
+
+  // CSV import
+  const csvInput = document.getElementById("csv-input");
+  const csvImportBtn = document.getElementById("csv-import-btn");
+  csvImportBtn.addEventListener("click", () => {
+    const text = csvInput.value.trim();
+    if (!text) {
+      announce("CSV input is empty");
+      return;
+    }
+    const lines = text.split(/\r?\n/);
+    const newPoints = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      const parts = line.split(",");
+      if (parts.length !== 2) {
+        announce(`Invalid CSV format on line ${i + 1}`);
+        return;
+      }
+      const ts = new Date(parts);
+      const val = Number(parts[1]);
+      if (isNaN(ts) || isNaN(val)) {
+        announce(`Invalid timestamp or value on line ${i + 1}`);
+        return;
+      }
+      newPoints.push({ id: genId(), timestamp: ts, value: val });
+    }
+    if (newPoints.length === 0) {
+      announce("No valid data points found in CSV");
+      return;
+    }
+    pushUndo();
+    dataPoints = dataPoints.concat(newPoints);
+    dataPoints.sort((a, b) => a.timestamp - b.timestamp);
+    saveState();
+    refreshAll();
+    csvInput.value = "";
+    announce(`Imported ${newPoints.length} data points from CSV`);
+  });
+
+  // Chart interaction handlers
+  chartCanvas.addEventListener("mousedown", (e) => {
+    const rect = chartCanvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const idx = findPointAt(x, y);
+    if (idx >= 0) {
+      isDraggingPoint = true;
+      dragPointId = dataPoints[idx].id;
+      dragStartPos = { x, y };
+      dragStartValue = dataPoints[idx].value;
+      dragStartTimestamp = dataPoints[idx].timestamp.getTime();
+      chartCanvas.style.cursor = "grabbing";
+      e.preventDefault();
+    }
+  });
+  window.addEventListener("mouseup", (e) => {
+    if (isDraggingPoint) {
+      isDraggingPoint = false;
+      dragPointId = null;
+      dragStartPos = null;
+      dragStartValue = null;
+      dragStartTimestamp = null;
+      chartCanvas.style.cursor = "default";
+      saveState();
+      refreshAll();
+      announce("Data point moved");
+    }
+  });
+  chartCanvas.addEventListener("mousemove", (e) => {
+    const rect = chartCanvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    if (isDraggingPoint && dragPointId) {
+      // Move point according to mouse position
+      const p = dataPoints.find((pt) => pt.id === dragPointId);
+      if (!p) return;
+      // Calculate new timestamp and value based on mouse position
+      let newTime = xToTime(x);
+      let newValue = yToValue(y);
+      // Clamp to visible ranges
+      newTime = clamp(newTime, viewState.timeMin, viewState.timeMax);
+      newValue = clamp(newValue, viewState.valueMin, viewState.valueMax);
+      // Update point temporarily (no undo push here)
+      p.timestamp = new Date(newTime);
+      p.value = newValue;
+      dataPoints.sort((a, b) => a.timestamp - b.timestamp);
+      refreshAll();
+      e.preventDefault();
+    } else {
+      // Change cursor if hovering point
+      const idx = findPointAt(x, y);
+      chartCanvas.style.cursor = idx >= 0 ? "grab" : "default";
+    }
+  });
+
+  // Keyboard navigation and shortcuts
+  chartCanvas.addEventListener("keydown", (e) => {
+    if (dataPoints.length === 0) return;
+    switch (e.key) {
+      case "ArrowRight":
+        // Move focus to next point
+        focusedPointIndex = (focusedPointIndex + 1) % dataPoints.length;
+        announce(
+          `Focused data point ${focusedPointIndex + 1}, timestamp ${formatDateTimeForDisplay(
+            dataPoints[focusedPointIndex].timestamp
+          )}, value ${dataPoints[focusedPointIndex].value.toFixed(2)}`
+        );
+        refreshAll();
+        e.preventDefault();
+        break;
+      case "ArrowLeft":
+        // Move focus to previous point
+        focusedPointIndex =
+          (focusedPointIndex - 1 + dataPoints.length) % dataPoints.length;
+        announce(
+          `Focused data point ${focusedPointIndex + 1}, timestamp ${formatDateTimeForDisplay(
+            dataPoints[focusedPointIndex].timestamp
+          )}, value ${dataPoints[focusedPointIndex].value.toFixed(2)}`
+        );
+        refreshAll();
+        e.preventDefault();
+        break;
+      case "+":
+      case "=":
+        zoomChart(true);
+        e.preventDefault();
+        break;
+      case "-":
+      case "_":
+        zoomChart(false);
+        e.preventDefault();
+        break;
+      case "ArrowUp":
+        panChart(false);
+        e.preventDefault();
+        break;
+      case "ArrowDown":
+        panChart(true);
+        e.preventDefault();
+        break;
+      case "Delete":
+      case "Backspace":
+        if (focusedPointIndex >= 0 && focusedPointIndex < dataPoints.length) {
+          pushUndo();
+          const removed = dataPoints.splice(focusedPointIndex, 1);
+          announce(
+            `Deleted data point ${focusedPointIndex + 1} with timestamp ${formatDateTimeForDisplay(
+              removed.timestamp
+            )}`
+          );
+          focusedPointIndex = -1;
+          saveState();
+          refreshAll();
+          e.preventDefault();
+        }
+        break;
+      case "z":
+        if (e.ctrlKey || e.metaKey) {
+          if (e.shiftKey) redo();
+          else undo();
+          e.preventDefault();
+        }
+        break;
+      case "r":
+        if (e.ctrlKey || e.metaKey) {
+          resetAll();
+          e.preventDefault();
+        }
+        break;
+    }
+  });
+
+  // Zoom chart in or out
+  function zoomChart(zoomIn) {
+    if (!viewState.timeMin || !viewState.timeMax) return;
+    const timeRange = viewState.timeMax - viewState.timeMin;
+    const valueRange = viewState.valueMax - viewState.valueMin;
+    const zoomFactor = zoomIn ? 1 / ZOOM_FACTOR : ZOOM_FACTOR;
+
+    // Zoom time axis centered on midpoint
+    const timeMid = (viewState.timeMin + viewState.timeMax) / 2;
+    let newTimeRange = timeRange * zoomFactor;
+    if (newTimeRange < 60000) newTimeRange = 60000; // minimum 1 min range
+    viewState.timeMin = timeMid - newTimeRange / 2;
+    viewState.timeMax = timeMid + newTimeRange / 2;
+
+    // Zoom value axis centered on midpoint
+    const valueMid = (viewState.valueMin + viewState.valueMax) / 2;
+    let newValueRange = valueRange * zoomFactor;
+    if (newValueRange < 0.01) newValueRange = 0.01; // minimum range
+    viewState.valueMin = valueMid - newValueRange / 2;
+    viewState.valueMax = valueMid + newValueRange / 2;
+
+    saveState();
+    refreshAll();
+    announce(zoomIn ? "Zoomed in chart" : "Zoomed out chart");
+  }
+
+  // Pan chart left/right (time axis)
+  function panChart(toRight) {
+    if (!viewState.timeMin || !viewState.timeMax) return;
+    const timeRange = viewState.timeMax - viewState.timeMin;
+    const panAmount = timeRange * PAN_FACTOR;
+    if (toRight) {
+      viewState.timeMin += panAmount;
+      viewState.timeMax += panAmount;
+    } else {
+      viewState.timeMin -= panAmount;
+      viewState.timeMax -= panAmount;
+    }
+    saveState();
+    refreshAll();
+    announce(toRight ? "Panned chart right" : "Panned chart left");
+  }
+
+  // Controls buttons
+  const undoBtn = document.getElementById("undo-btn");
+  const redoBtn = document.getElementById("redo-btn");
+  const resetBtn = document.getElementById("reset-btn");
+  const zoomInBtn = document.getElementById("zoom-in-btn");
+  const zoomOutBtn = document.getElementById("zoom-out-btn");
+  const panLeftBtn = document.getElementById("pan-left-btn");
+  const panRightBtn = document.getElementById("pan-right-btn");
+
+  undoBtn.addEventListener("click", () => {
+    undo();
+    chartCanvas.focus();
+  });
+  redoBtn.addEventListener("click", () => {
+    redo();
+    chartCanvas.focus();
+  });
+  resetBtn.addEventListener("click", () => {
+    resetAll();
+    chartCanvas.focus();
+  });
+  zoomInBtn.addEventListener("click", () => {
+    zoomChart(true);
+    chartCanvas.focus();
+  });
+  zoomOutBtn.addEventListener("click", () => {
+    zoomChart(false);
+    chartCanvas.focus();
+  });
+  panLeftBtn.addEventListener("click", () => {
+    panChart(false);
+    chartCanvas.focus();
+  });
+  panRightBtn.addEventListener("click", () => {
+    panChart(true);
+    chartCanvas.focus();
+  });
+
+  // Initialization
+  function init() {
+    loadState();
+    resizeCanvas();
+    computeViewRanges();
+    updateUndoRedoButtons();
+    refreshAll();
+  }
+
+  window.addEventListener("resize", () => {
+    resizeCanvas();
+    refreshAll();
+  });
+
+  // Initialize tab index and keyboard focus for chart
+  chartCanvas.tabIndex = 0;
+  chartCanvas.setAttribute("role", "application");
+  chartCanvas.setAttribute("aria-label", "Interactive time series line chart");
+
+  init();
+})();
+</script>
+</body>
+</html>
