@@ -6,7 +6,7 @@ API_URL = "https://api.perplexity.ai/chat/completions"
 MODEL = os.getenv("PPLX_MODEL", "sonar")
 TIMEOUT = int(os.getenv("PPLX_TIMEOUT", "300"))
 
-# Folders: versioned artifacts + "latest" convenience copies
+# Folders: versioned artifacts (no timestamps) + "latest" convenience copies
 DIST = pathlib.Path("dist")
 PROMPTS_DIR = DIST / "prompts"
 APPS_DIR = DIST / "apps"
@@ -31,14 +31,16 @@ FEATURE_EXTRAS = [
 ]
 
 SYSTEM_PROMPT_GEN = """You are a senior product spec writer.
-Task: Produce a concise, *buildable* prompt for a SINGLE-FILE web app.
+Task: Produce a concise, *buildable* prompt for a small single-file app.
 Requirements:
 - The output MUST be PLAIN TEXT only (no code fences or commentary).
 - Title on the first line. Then a clear bulleted spec.
-- Must demand ONE HTML file with inline CSS and JS, no external libraries.
-- Include concrete features, accessibility, keyboard support, and persistence.
+- The app may be EITHER:
+  (a) a SINGLE-FILE web app (one HTML file with inline CSS and JS, no external libraries), OR
+  (b) a SINGLE-FILE Python 3 script (no external files; standard library only).
+- Include concrete features, accessibility/keyboard support when relevant, and persistence (e.g., localStorage or JSON file for Python).
 - Keep it < 250 lines of text. Avoid vague language.
-- End result must be implementable in under ~1000 lines of HTML+CSS+JS.
+- End result must be implementable in under ~1000 lines of code.
 """
 
 USER_PROMPT_GEN_TEMPLATE = """Generate a brand new single-file app specification.
@@ -51,19 +53,25 @@ Inspiration seed (date/time & randoms):
 Constraints:
 - Return ONLY the prompt (title then spec). No explanations or markdown fences.
 - Keep it distinct from previous days by varying purpose/features.
-- Include a testable feature set that can be implemented in one HTML file.
+- Include a testable feature set that can be implemented in one file (HTML or Python).
 Example titles: "Smart To-Do", "Budget Buddy", "Focus Timer+" (do NOT reuse these).
 """
 
 SYSTEM_BUILD = """You are a strict code generator.
-Output ONLY a complete, valid single-file HTML document starting with <!DOCTYPE html>.
-- Inline all CSS and JS (no external links, no modules, no CDNs).
-- Implement exactly the user's spec.
-- Ensure accessibility (labels, roles, aria-*), keyboard navigation, responsiveness.
-- Persist data with localStorage when relevant.
-- Include minimal, clean styling.
-- Keep the code concise and readable; avoid over-engineering.
-- NO markdown fences. NO extra commentary.
+Return EITHER:
+(A) ONLY a complete, valid single-file HTML document starting with <!DOCTYPE html>
+    - Inline all CSS and JS (no external links, no modules, no CDNs).
+    - Ensure accessibility (labels, roles, aria-*), keyboard navigation, responsiveness.
+    - Persist data with localStorage when relevant.
+    - Minimal, clean styling.
+    - NO markdown fences. NO commentary.
+OR
+(B) ONLY a single-file Python 3 script
+    - Standard library only. No external files required.
+    - Persist data if relevant (e.g., local JSON).
+    - Provide a simple CLI or minimal TUI if appropriate.
+    - NO markdown fences. NO commentary.
+Implement exactly the user's spec. Keep the code concise and readable.
 """
 
 def _session_with_retries() -> requests.Session:
@@ -89,28 +97,59 @@ def pplx_chat(messages, api_key, temperature, timeout=TIMEOUT):
     data = resp.json()
     return data["choices"][0]["message"]["content"]
 
-def extract_html(raw: str) -> str:
-    # If code fences present, extract; else return as-is.
-    fence = re.search(r"```(?:html)?\s*(.*?)\s*```", raw, re.DOTALL | re.IGNORECASE)
-    html = fence.group(1) if fence else raw
+def strip_code_fences(text: str) -> str:
+    """Remove markdown code fences if present."""
+    fence = re.search(r"```(?:\w+)?\s*(.*?)\s*```", text, re.DOTALL | re.IGNORECASE)
+    return fence.group(1) if fence else text
 
+def extract_html_or_python(raw: str) -> tuple[str, str]:
+    """
+    Return (content, kind) where kind is 'html' or 'py'.
+    Detect by markers; default to 'html' if <!DOCTYPE or <html> found, else 'py' when it
+    looks like Python (imports/def/class/if __name__ guard).
+    """
+    text = strip_code_fences(raw)
+
+    # Heuristics
+    lower = text.lower()
+    if "<!doctype html>" in lower or "<html" in lower:
+        return text, "html"
+
+    py_markers = (
+        r"\bimport\b", r"\bfrom\b\s+\w+\s+\bimport\b",
+        r"\bdef\s+\w+\(", r"\bclass\s+\w+\(", r"if\s+__name__\s*==\s*['\"]__main__['\"]"
+    )
+    if any(re.search(p, text) for p in py_markers):
+        return text, "py"
+
+    # Fallback: if it starts with <!DOCTYPE or <...> treat as html, otherwise python
+    if text.strip().startswith("<"):
+        return text, "html"
+    return text, "py"
+
+def enforce_single_file_html(html: str) -> str:
     # Ensure <!DOCTYPE html>
     if "<!doctype html>" not in html.lower():
         if "<html" not in html.lower():
             html = f"<!DOCTYPE html>\n<html><head><meta charset='utf-8'><title>App</title></head><body>\n{html}\n</body></html>"
         else:
             html = "<!DOCTYPE html>\n" + html
-
     # Remove external refs to enforce single-file
     html = re.sub(r'<script[^>]+src=["\'][^"\']+["\'][^>]*></script>', "", html, flags=re.IGNORECASE)
     html = re.sub(r'<link[^>]+rel=["\']stylesheet["\'][^>]*>', "", html, flags=re.IGNORECASE)
-
-    # Stamp time for guaranteed diffs
+    # Stamp time (as a comment) for traceability (does not affect filename)
     stamp = f"<!-- Auto-generated via Perplexity on {datetime.datetime.utcnow().isoformat()}Z -->"
     html = re.sub(r"(?i)<head>", f"<head>\n{stamp}\n", html, count=1)
     if stamp not in html:
         html = stamp + "\n" + html
     return html
+
+def add_python_stamp(py: str) -> str:
+    stamp = f"# Auto-generated via Perplexity on {datetime.datetime.utcnow().isoformat()}Z"
+    # Prepend if not already present
+    if not py.lstrip().startswith("# Auto-generated via Perplexity"):
+        return stamp + "\n" + py
+    return py
 
 def slugify(text: str) -> str:
     # Normalize, remove accents, keep alphanum and dashes, collapse spaces
@@ -134,17 +173,30 @@ def write_log(line: str):
     prev = LOG_OUT.read_text(encoding="utf-8") if LOG_OUT.exists() else ""
     LOG_OUT.write_text(prev + line + "\n", encoding="utf-8")
 
+def unique_path(base: pathlib.Path) -> pathlib.Path:
+    """
+    If base exists, append -2, -3, ... before the suffix until free.
+    Example: smart-todo.html, smart-todo-2.html, smart-todo-3.html
+    """
+    if not base.exists():
+        return base
+    stem, suffix = base.stem, base.suffix
+    i = 2
+    while True:
+        candidate = base.with_name(f"{stem}-{i}{suffix}")
+        if not candidate.exists():
+            return candidate
+        i += 1
+
 def main():
     api_key = os.getenv("PPLX_API_KEY")
     if not api_key:
         print("Missing PPLX_API_KEY secret", file=sys.stderr)
         sys.exit(1)
 
-    # Timestamps
+    # Timestamps for logs (not filenames)
     now = datetime.datetime.utcnow()
     utc_now = now.isoformat() + "Z"
-    # Filename-safe timestamp
-    ts = now.strftime("%Y-%m-%d_%H-%M-%S")
 
     # Randomization seeds for prompt diversity
     seed = random.randint(10_000, 99_999)
@@ -167,11 +219,10 @@ def main():
         )
         title = first_line_title(prompt_text)
         slug = slugify(title)
-        # Versioned + latest prompt paths
-        prompt_versioned = PROMPTS_DIR / f"{ts}_{slug}.txt"
-        write_text(prompt_versioned, prompt_text.strip() + f"\n\n(Generated: {utc_now}, seed={seed}, theme={theme}, extras={extras})\n")
+        prompt_path = unique_path(PROMPTS_DIR / f"{slug}.txt")
+        write_text(prompt_path, prompt_text.strip() + f"\n\n(Generated: {utc_now}, seed={seed}, theme={theme}, extras={extras})\n")
         write_text(LATEST_DIR / "prompt.txt", prompt_text.strip())
-        print(f"Wrote {prompt_versioned}")
+        print(f"Wrote {prompt_path}")
         write_log(f"[{utc_now}] Prompt OK  seed={seed}  theme={theme}  extras={extras}  title='{title}'  slug={slug}")
     except Exception as e:
         err = f"[{utc_now}] Prompt generation FAILED: {type(e).__name__}: {e}"
@@ -179,9 +230,9 @@ def main():
         write_log(err)
         sys.exit(1)
 
-    # ----- Stage 2: Build the single-file app from the prompt -----
+    # ----- Stage 2: Build the app (HTML or Python) from the prompt -----
     try:
-        raw_html = pplx_chat(
+        raw = pplx_chat(
             messages=[
                 {"role": "system", "content": SYSTEM_BUILD},
                 {"role": "user", "content": prompt_text},
@@ -189,20 +240,30 @@ def main():
             api_key=api_key,
             temperature=BUILD_TEMPERATURE,
         )
-        html = extract_html(raw_html)
-        # Versioned + latest app paths
-        app_versioned = APPS_DIR / f"{ts}_{slug}.html"
-        write_text(app_versioned, html)
-        write_text(LATEST_DIR / "app.html", html)
-        print(f"Wrote {app_versioned}")
-        write_log(f"[{utc_now}] Build OK  file={app_versioned.name}")
+        content, kind = extract_html_or_python(raw)
+
+        if kind == "html":
+            content = enforce_single_file_html(content)
+            base = APPS_DIR / f"{slug}.html"
+            app_path = unique_path(base)
+            write_text(app_path, content)
+            write_text(LATEST_DIR / "app.html", content)
+        else:
+            content = add_python_stamp(content)
+            base = APPS_DIR / f"{slug}.py"
+            app_path = unique_path(base)
+            write_text(app_path, content)
+            write_text(LATEST_DIR / "app.py", content)
+
+        print(f"Wrote {app_path}")
+        write_log(f"[{utc_now}] Build OK  file={app_path.name}  kind={kind}")
     except Exception as e:
         err = f"[{utc_now}] Build FAILED: {type(e).__name__}: {e}"
         print(err, file=sys.stderr)
         write_log(err)
         sys.exit(1)
 
-    print(f"Done. Versioned files:\n  - {app_versioned}\n  - {prompt_versioned}\nLatest copies:\n  - {LATEST_DIR/'app.html'}\n  - {LATEST_DIR/'prompt.txt'}")
+    print(f"Done.\nSaved:\n  - {prompt_path}\n  - {app_path}\nLatest copies updated in {LATEST_DIR}")
 
 if __name__ == "__main__":
     main()
