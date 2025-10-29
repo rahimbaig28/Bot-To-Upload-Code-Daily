@@ -1,18 +1,23 @@
 import os, json, pathlib, re, datetime, requests, sys, random
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 API_URL = "https://api.perplexity.ai/chat/completions"
-MODEL = "sonar"
-TIMEOUT = 120
+MODEL = os.getenv("PPLX_MODEL", "sonar")
+
+# Allow overriding the read-timeout from the workflow env (default 300s)
+TIMEOUT = int(os.getenv("PPLX_TIMEOUT", "300"))
 
 OUT_DIR = pathlib.Path("dist")
 PROMPT_OUT = OUT_DIR / "prompt.txt"
 APP_OUT = OUT_DIR / "app.html"
+LOG_OUT = OUT_DIR / "log.txt"
 
 # --- Tunables ---
-PROMPT_TEMPERATURE = 0.8     # more creativity for prompt
-BUILD_TEMPERATURE = 0.3      # more determinism for code
+PROMPT_TEMPERATURE = 0.8   # more creativity for prompt
+BUILD_TEMPERATURE  = 0.3   # more determinism for code
 
-# Rotating “themes” and “features” for variety; the prompt-generator can use these.
+# Rotating themes/features for variety in the auto-generated prompt
 THEMES = [
     "personal productivity", "learning & study tools", "health & wellness",
     "small business utilities", "finance & budgeting", "data visualization",
@@ -34,6 +39,7 @@ Requirements:
 - Must demand ONE HTML file with inline CSS and JS, no external libraries.
 - Include concrete features, accessibility, keyboard support, and persistence.
 - Keep it < 250 lines of text. Avoid vague language.
+- End result must be implementable in under ~1000 lines of HTML+CSS+JS.
 """
 
 USER_PROMPT_GEN_TEMPLATE = """Generate a brand new single-file app specification.
@@ -44,7 +50,7 @@ Inspiration seed (date/time & randoms):
 - extra features to consider: {extras}
 
 Constraints:
-- Return ONLY the prompt (title then spec). No explanations.
+- Return ONLY the prompt (title then spec). No explanations or markdown fences.
 - Keep it distinct from previous days by varying purpose/features.
 - Include a testable feature set that can be implemented in one HTML file.
 Example titles: "Smart To-Do", "Budget Buddy", "Focus Timer+" (do NOT reuse these).
@@ -57,15 +63,41 @@ Output ONLY a complete, valid single-file HTML document starting with <!DOCTYPE 
 - Ensure accessibility (labels, roles, aria-*), keyboard navigation, responsiveness.
 - Persist data with localStorage when relevant.
 - Include minimal, clean styling.
+- Keep the code concise and readable; avoid over-engineering.
 - NO markdown fences. NO extra commentary.
 """
 
+def _session_with_retries() -> requests.Session:
+    """HTTP session with retries/backoff for transient failures and timeouts."""
+    s = requests.Session()
+    retry = Retry(
+        total=5,
+        connect=5,
+        read=5,
+        backoff_factor=1.5,  # 0s, 1.5s, 3s, 4.5s, 6s ...
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=("POST", "GET"),
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(max_retries=retry, pool_connections=10, pool_maxsize=10)
+    s.mount("https://", adapter)
+    s.mount("http://", adapter)
+    return s
+
 def pplx_chat(messages, api_key, temperature, timeout=TIMEOUT):
+    sess = _session_with_retries()
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    payload = {"model": MODEL, "temperature": temperature, "messages": messages}
-    r = requests.post(API_URL, headers=headers, data=json.dumps(payload), timeout=timeout)
-    r.raise_for_status()
-    data = r.json()
+    payload = {
+        "model": MODEL,
+        "temperature": float(temperature),
+        "messages": messages,
+        # You can uncomment to hint smaller responses if needed:
+        # "max_tokens": 4096,
+    }
+    # Separate connect/read timeouts; give server time to generate
+    resp = sess.post(API_URL, headers=headers, data=json.dumps(payload), timeout=(15, timeout))
+    resp.raise_for_status()
+    data = resp.json()
     return data["choices"][0]["message"]["content"]
 
 def extract_html(raw: str) -> str:
@@ -75,15 +107,14 @@ def extract_html(raw: str) -> str:
 
     # Ensure <!DOCTYPE html>
     if "<!doctype html>" not in html.lower():
-        # Add minimal wrapper if needed
         if "<html" not in html.lower():
             html = f"<!DOCTYPE html>\n<html><head><meta charset='utf-8'><title>App</title></head><body>\n{html}\n</body></html>"
         else:
             html = "<!DOCTYPE html>\n" + html
 
     # Remove external refs to enforce single-file
-    html = re.sub(r'<script[^>]+src=["\'][^"\']+["\'][^>]*></script>', '', html, flags=re.IGNORECASE)
-    html = re.sub(r'<link[^>]+rel=["\']stylesheet["\'][^>]*>', '', html, flags=re.IGNORECASE)
+    html = re.sub(r'<script[^>]+src=["\'][^"\']+["\'][^>]*></script>', "", html, flags=re.IGNORECASE)
+    html = re.sub(r'<link[^>]+rel=["\']stylesheet["\'][^>]*>', "", html, flags=re.IGNORECASE)
 
     # Stamp time for guaranteed diffs
     stamp = f"<!-- Auto-generated via Perplexity on {datetime.datetime.utcnow().isoformat()}Z -->"
@@ -92,45 +123,68 @@ def extract_html(raw: str) -> str:
         html = stamp + "\n" + html
     return html
 
+def write_log(line: str):
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    prev = LOG_OUT.read_text(encoding="utf-8") if LOG_OUT.exists() else ""
+    LOG_OUT.write_text(prev + line + "\n", encoding="utf-8")
+
 def main():
     api_key = os.getenv("PPLX_API_KEY")
     if not api_key:
         print("Missing PPLX_API_KEY secret", file=sys.stderr)
         sys.exit(1)
 
-    # ----- Stage 1: Generate the prompt -----
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
     utc_now = datetime.datetime.utcnow().isoformat() + "Z"
     seed = random.randint(10_000, 99_999)
     theme = random.choice(THEMES)
     extras = ", ".join(random.sample(FEATURE_EXTRAS, k=3))
 
+    # ----- Stage 1: Generate the prompt -----
     user_prompt_gen = USER_PROMPT_GEN_TEMPLATE.format(
         utc=utc_now, seed=seed, theme=theme, extras=extras
     )
 
-    prompt_text = pplx_chat(
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT_GEN},
-            {"role": "user", "content": user_prompt_gen}
-        ],
-        api_key=api_key,
-        temperature=PROMPT_TEMPERATURE
-    )
-
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    PROMPT_OUT.write_text(prompt_text.strip() + f"\n\n(Generated: {utc_now}, seed={seed})\n", encoding="utf-8")
+    try:
+        prompt_text = pplx_chat(
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT_GEN},
+                {"role": "user", "content": user_prompt_gen},
+            ],
+            api_key=api_key,
+            temperature=PROMPT_TEMPERATURE,
+        )
+        PROMPT_OUT.write_text(
+            prompt_text.strip() + f"\n\n(Generated: {utc_now}, seed={seed}, theme={theme}, extras={extras})\n",
+            encoding="utf-8",
+        )
+        print(f"Wrote {PROMPT_OUT}")
+        write_log(f"[{utc_now}] Prompt OK  seed={seed}  theme={theme}  extras={extras}")
+    except Exception as e:
+        err = f"[{utc_now}] Prompt generation FAILED: {type(e).__name__}: {e}"
+        print(err, file=sys.stderr)
+        write_log(err)
+        sys.exit(1)
 
     # ----- Stage 2: Build the single-file app from the prompt -----
-    raw_html = pplx_chat(
-        messages=[
-            {"role": "system", "content": SYSTEM_BUILD},
-            {"role": "user", "content": prompt_text}
-        ],
-        api_key=api_key,
-        temperature=BUILD_TEMPERATURE
-    )
-    html = extract_html(raw_html)
-    APP_OUT.write_text(html, encoding="utf-8")
+    try:
+        raw_html = pplx_chat(
+            messages=[
+                {"role": "system", "content": SYSTEM_BUILD},
+                {"role": "user", "content": prompt_text},
+            ],
+            api_key=api_key,
+            temperature=BUILD_TEMPERATURE,
+        )
+        html = extract_html(raw_html)
+        APP_OUT.write_text(html, encoding="utf-8")
+        print(f"Wrote {APP_OUT}")
+        write_log(f"[{utc_now}] Build OK")
+    except Exception as e:
+        err = f"[{utc_now}] Build FAILED: {type(e).__name__}: {e}"
+        print(err, file=sys.stderr)
+        write_log(err)
+        sys.exit(1)
 
     print(f"Wrote {PROMPT_OUT} and {APP_OUT}")
 

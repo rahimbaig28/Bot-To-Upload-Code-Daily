@@ -2,8 +2,13 @@ name: Daily Perplexity Update
 
 on:
   schedule:
-    - cron: "*/5 * * * *"   # Runs every 5 minutes (minimum GitHub-supported interval)
+    - cron: "*/5 * * * *"   # every 5 minutes (GitHub's minimum)
   workflow_dispatch: {}
+
+# prevent overlapping runs if one takes longer than 5 minutes
+concurrency:
+  group: perplexity-auto
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -11,6 +16,7 @@ permissions:
 jobs:
   run-and-commit:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,10 +29,23 @@ jobs:
       - name: Install dependencies
         run: pip install requests
 
-      - name: Generate auto-prompt + single-file app
+      # Retries the generator up to 3 times and gives the API more time to respond
+      - name: Generate auto-prompt + single-file app (with retries)
         env:
           PPLX_API_KEY: ${{ secrets.PPLX_API_KEY }}
-        run: python automation/generate.py
+          PPLX_TIMEOUT: "420"        # read-timeout seconds; tune if needed
+          PPLX_MODEL: "sonar"        # override model if you want
+        run: |
+          set -e
+          for i in 1 2 3; do
+            echo "Attempt $i..."
+            if python automation/generate.py; then
+              echo "Success."
+              break
+            fi
+            echo "Attempt $i failed. Sleeping before retry..."
+            sleep 10
+          done
 
       - name: Commit & push if changed
         uses: stefanzweifel/git-auto-commit-action@v5
@@ -37,3 +56,4 @@ jobs:
           file_pattern: |
             dist/app.html
             dist/prompt.txt
+            dist/log.txt
