@@ -5,8 +5,7 @@ on:
     - cron: "0 13 * * *"   # run once daily at 13:00 UTC
   workflow_dispatch: {}
 
-
-# prevent overlapping runs if one takes longer than 5 minutes
+# prevent overlapping runs
 concurrency:
   group: perplexity-auto
   cancel-in-progress: true
@@ -35,7 +34,7 @@ jobs:
         env:
           PPLX_API_KEY: ${{ secrets.PPLX_API_KEY }}
           PPLX_TIMEOUT: "420"        # read-timeout seconds; tune if needed
-          PPLX_MODEL: "sonar"        # override model if you want
+          PPLX_MODEL: "sonar"        # override model if desired
         run: |
           set -e
           for i in 1 2 3; do
@@ -48,17 +47,26 @@ jobs:
             sleep 10
           done
 
+      - name: Show generated files
+        run: |
+          echo "== dist tree =="
+          ls -lah dist || true
+          echo "== prompts =="
+          ls -lah dist/prompts || true
+          echo "== apps =="
+          ls -lah dist/apps || true
+          echo "== latest =="
+          ls -lah dist/latest || true
+
+      - name: Verify prompt exists
+        run: |
+          test -f dist/latest/prompt.txt || (echo "No prompt found at dist/latest/prompt.txt" && exit 1)
+
       - name: Commit & push if changed
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "automation using Perplexity AI"
           commit_user_name: "rahimbaig28"
           commit_user_email: "rahimbaig00332211@gmail.com"
-          file_pattern: |
-              dist/apps/*.html
-              dist/apps/*.py
-              dist/prompts/*.txt
-              dist/latest/app.html
-              dist/latest/app.py
-              dist/latest/prompt.txt
-              dist/log.txt
+          file_pattern: "dist/**"
+          add_options: "--force"   # commits even if dist/ is ignored by .gitignore
