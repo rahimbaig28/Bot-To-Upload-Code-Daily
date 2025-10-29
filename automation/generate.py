@@ -1,23 +1,22 @@
-import os, json, pathlib, re, datetime, requests, sys, random
+import os, json, pathlib, re, datetime, requests, sys, random, unicodedata
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 API_URL = "https://api.perplexity.ai/chat/completions"
 MODEL = os.getenv("PPLX_MODEL", "sonar")
-
-# Allow overriding the read-timeout from the workflow env (default 300s)
 TIMEOUT = int(os.getenv("PPLX_TIMEOUT", "300"))
 
-OUT_DIR = pathlib.Path("dist")
-PROMPT_OUT = OUT_DIR / "prompt.txt"
-APP_OUT = OUT_DIR / "app.html"
-LOG_OUT = OUT_DIR / "log.txt"
+# Folders: versioned artifacts + "latest" convenience copies
+DIST = pathlib.Path("dist")
+PROMPTS_DIR = DIST / "prompts"
+APPS_DIR = DIST / "apps"
+LATEST_DIR = DIST / "latest"
+LOG_OUT = DIST / "log.txt"
 
 # --- Tunables ---
-PROMPT_TEMPERATURE = 0.8   # more creativity for prompt
-BUILD_TEMPERATURE  = 0.3   # more determinism for code
+PROMPT_TEMPERATURE = 0.8
+BUILD_TEMPERATURE  = 0.3
 
-# Rotating themes/features for variety in the auto-generated prompt
 THEMES = [
     "personal productivity", "learning & study tools", "health & wellness",
     "small business utilities", "finance & budgeting", "data visualization",
@@ -68,13 +67,10 @@ Output ONLY a complete, valid single-file HTML document starting with <!DOCTYPE 
 """
 
 def _session_with_retries() -> requests.Session:
-    """HTTP session with retries/backoff for transient failures and timeouts."""
     s = requests.Session()
     retry = Retry(
-        total=5,
-        connect=5,
-        read=5,
-        backoff_factor=1.5,  # 0s, 1.5s, 3s, 4.5s, 6s ...
+        total=5, connect=5, read=5,
+        backoff_factor=1.5,
         status_forcelist=(429, 500, 502, 503, 504),
         allowed_methods=("POST", "GET"),
         raise_on_status=False,
@@ -87,14 +83,7 @@ def _session_with_retries() -> requests.Session:
 def pplx_chat(messages, api_key, temperature, timeout=TIMEOUT):
     sess = _session_with_retries()
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    payload = {
-        "model": MODEL,
-        "temperature": float(temperature),
-        "messages": messages,
-        # You can uncomment to hint smaller responses if needed:
-        # "max_tokens": 4096,
-    }
-    # Separate connect/read timeouts; give server time to generate
+    payload = {"model": MODEL, "temperature": float(temperature), "messages": messages}
     resp = sess.post(API_URL, headers=headers, data=json.dumps(payload), timeout=(15, timeout))
     resp.raise_for_status()
     data = resp.json()
@@ -123,8 +112,25 @@ def extract_html(raw: str) -> str:
         html = stamp + "\n" + html
     return html
 
+def slugify(text: str) -> str:
+    # Normalize, remove accents, keep alphanum and dashes, collapse spaces
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+    text = re.sub(r"[^\w\s-]", "", text).strip().lower()
+    text = re.sub(r"[\s_-]+", "-", text)
+    return text or "app"
+
+def first_line_title(prompt_text: str) -> str:
+    for line in prompt_text.splitlines():
+        if line.strip():
+            return line.strip()
+    return "app"
+
+def write_text(path: pathlib.Path, content: str):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
 def write_log(line: str):
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    DIST.mkdir(parents=True, exist_ok=True)
     prev = LOG_OUT.read_text(encoding="utf-8") if LOG_OUT.exists() else ""
     LOG_OUT.write_text(prev + line + "\n", encoding="utf-8")
 
@@ -134,8 +140,13 @@ def main():
         print("Missing PPLX_API_KEY secret", file=sys.stderr)
         sys.exit(1)
 
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    utc_now = datetime.datetime.utcnow().isoformat() + "Z"
+    # Timestamps
+    now = datetime.datetime.utcnow()
+    utc_now = now.isoformat() + "Z"
+    # Filename-safe timestamp
+    ts = now.strftime("%Y-%m-%d_%H-%M-%S")
+
+    # Randomization seeds for prompt diversity
     seed = random.randint(10_000, 99_999)
     theme = random.choice(THEMES)
     extras = ", ".join(random.sample(FEATURE_EXTRAS, k=3))
@@ -154,12 +165,14 @@ def main():
             api_key=api_key,
             temperature=PROMPT_TEMPERATURE,
         )
-        PROMPT_OUT.write_text(
-            prompt_text.strip() + f"\n\n(Generated: {utc_now}, seed={seed}, theme={theme}, extras={extras})\n",
-            encoding="utf-8",
-        )
-        print(f"Wrote {PROMPT_OUT}")
-        write_log(f"[{utc_now}] Prompt OK  seed={seed}  theme={theme}  extras={extras}")
+        title = first_line_title(prompt_text)
+        slug = slugify(title)
+        # Versioned + latest prompt paths
+        prompt_versioned = PROMPTS_DIR / f"{ts}_{slug}.txt"
+        write_text(prompt_versioned, prompt_text.strip() + f"\n\n(Generated: {utc_now}, seed={seed}, theme={theme}, extras={extras})\n")
+        write_text(LATEST_DIR / "prompt.txt", prompt_text.strip())
+        print(f"Wrote {prompt_versioned}")
+        write_log(f"[{utc_now}] Prompt OK  seed={seed}  theme={theme}  extras={extras}  title='{title}'  slug={slug}")
     except Exception as e:
         err = f"[{utc_now}] Prompt generation FAILED: {type(e).__name__}: {e}"
         print(err, file=sys.stderr)
@@ -177,16 +190,19 @@ def main():
             temperature=BUILD_TEMPERATURE,
         )
         html = extract_html(raw_html)
-        APP_OUT.write_text(html, encoding="utf-8")
-        print(f"Wrote {APP_OUT}")
-        write_log(f"[{utc_now}] Build OK")
+        # Versioned + latest app paths
+        app_versioned = APPS_DIR / f"{ts}_{slug}.html"
+        write_text(app_versioned, html)
+        write_text(LATEST_DIR / "app.html", html)
+        print(f"Wrote {app_versioned}")
+        write_log(f"[{utc_now}] Build OK  file={app_versioned.name}")
     except Exception as e:
         err = f"[{utc_now}] Build FAILED: {type(e).__name__}: {e}"
         print(err, file=sys.stderr)
         write_log(err)
         sys.exit(1)
 
-    print(f"Wrote {PROMPT_OUT} and {APP_OUT}")
+    print(f"Done. Versioned files:\n  - {app_versioned}\n  - {prompt_versioned}\nLatest copies:\n  - {LATEST_DIR/'app.html'}\n  - {LATEST_DIR/'prompt.txt'}")
 
 if __name__ == "__main__":
     main()

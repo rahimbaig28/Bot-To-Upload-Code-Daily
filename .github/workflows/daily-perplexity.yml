@@ -54,6 +54,8 @@ jobs:
           commit_user_name: "rahimbaig28"
           commit_user_email: "rahimbaig00332211@gmail.com"
           file_pattern: |
-            dist/app.html
-            dist/prompt.txt
+            dist/apps/*.html
+            dist/prompts/*.txt
+            dist/latest/app.html
+            dist/latest/prompt.txt
             dist/log.txt
