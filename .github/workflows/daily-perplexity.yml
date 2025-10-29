@@ -2,8 +2,9 @@ name: Daily Perplexity Update
 
 on:
   schedule:
-    - cron: "*/5 * * * *"   # every 5 minutes (GitHub's minimum)
+    - cron: "0 13 * * *"   # run once daily at 13:00 UTC
   workflow_dispatch: {}
+
 
 # prevent overlapping runs if one takes longer than 5 minutes
 concurrency:
