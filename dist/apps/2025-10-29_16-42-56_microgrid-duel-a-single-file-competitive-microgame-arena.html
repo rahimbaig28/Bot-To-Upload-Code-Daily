@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!-- Auto-generated via Perplexity on 2025-10-29T16:43:18.774067Z -->
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MicroGrid Duel</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f0f0;
+        }
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            padding: 20px;
+            max-width: 600px;
+            margin: auto;
+        }
+        .microgame {
+            border: 1px solid #ccc;
+            padding: 10px;
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .microgame:focus {
+            outline: 2px solid #007bff;
+        }
+        .scoreboard {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .scoreboard table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        .scoreboard th, .scoreboard td {
+            border: 1px solid #ddd;
+            padding: 5px;
+            text-align: left;
+        }
+        .scoreboard th {
+            background-color: #f0f0f0;
+        }
+        @media (max-width: 768px) {
+            .grid-container {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        @media (max-width: 480px) {
+            .grid-container {
+                grid-template-columns: repeat(1, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="grid-container" role="grid" aria-label="Microgame Grid">
+        <!-- Microgames will be dynamically added here -->
+    </div>
+    <div class="scoreboard">
+        <h2>Global Scoreboard</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Microgame</th>
+                    <th>High Score</th>
+                </tr>
+            </thead>
+            <tbody id="scoreboardBody">
+                <!-- Scores will be dynamically updated here -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // Microgame definitions
+        const microgames = [
+            {
+                name: "Reflex Clicker",
+                html: '<button role="button" aria-label="Click me">Click me</button>',
+                logic: function() {
+                    let score = 0;
+                    const button = this.querySelector('button');
+                    button.addEventListener('click', () => {
+                        score++;
+                        this.querySelector('.score').textContent = score;
+                    });
+                    return score;
+                }
+            },
+            {
+                name: "Pattern Matcher",
+                html: '<div role="button" aria-label="Match the pattern">Match the pattern</div>',
+                logic: function() {
+                    let score = 0;
+                    const div = this.querySelector('div');
+                    div.addEventListener('click', () => {
+                        score++;
+                        this.querySelector('.score').textContent = score;
+                    });
+                    return score;
+                }
+            },
+            {
+                name: "Simple Puzzle",
+                html: '<input type="text" role="textbox" aria-label="Solve the puzzle" placeholder="Solve the puzzle">',
+                logic: function() {
+                    let score = 0;
+                    const input = this.querySelector('input');
+                    input.addEventListener('input', () => {
+                        if (input.value === "solution") {
+                            score++;
+                            this.querySelector('.score').textContent = score;
+                        }
+                    });
+                    return score;
+                }
+            },
+            {
+                name: "Reaction Time",
+                html: '<button role="button" aria-label="React quickly">React quickly</button>',
+                logic: function() {
+                    let score = 0;
+                    const button = this.querySelector('button');
+                    button.addEventListener('click', () => {
+                        score++;
+                        this.querySelector('.score').textContent = score;
+                    });
+                    return score;
+                }
+            },
+            {
+                name: "Color Match",
+                html: '<div role="button" aria-label="Match the color">Match the color</div>',
+                logic: function() {
+                    let score = 0;
+                    const div = this.querySelector('div');
+                    div.addEventListener('click', () => {
+                        score++;
+                        this.querySelector('.score').textContent = score;
+                    });
+                    return score;
+                }
+            },
+            {
+                name: "Shape Sorter",
+                html: '<input type="text" role="textbox" aria-label="Sort the shapes" placeholder="Sort the shapes">',
+                logic: function() {
+                    let score = 0;
+                    const input = this.querySelector('input');
+                    input.addEventListener('input', () => {
+                        if (input.value === "sorted") {
+                            score++;
+                            this.querySelector('.score').textContent = score;
+                        }
+                    });
+                    return score;
+                }
+            }
+        ];
+
+        // Initialize grid and microgames
+        const gridContainer = document.querySelector('.grid-container');
+        let currentFocus = null;
+
+        // Function to create a microgame cell
+        function createMicrogameCell(microgame) {
+            const cell = document.createElement('div');
+            cell.classList.add('microgame');
+            cell.innerHTML = microgame.html + '<span class="score" aria-label="Score">0</span>';
+            cell.tabIndex = 0;
+            cell.role = 'gridcell';
+            cell.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    // Start/stop microgame logic
+                    const scoreElement = cell.querySelector('.score');
+                    const score = microgame.logic.call(cell);
+                    scoreElement.textContent = score;
+                }
+            });
+            cell.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('text', cell.innerHTML);
+            });
+            cell.addEventListener('dragover', (e) => {
+                e.preventDefault();
+            });
+            cell.addEventListener('drop', (e) => {
+                e.preventDefault();
+                const data = e.dataTransfer.getData('text');
+                const targetCell = e.target.closest('.microgame');
+                if (targetCell) {
+                    targetCell.innerHTML = data;
+                    targetCell.tabIndex = 0;
+                    targetCell.role = 'gridcell';
+                    targetCell.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            // Start/stop microgame logic
+                            const scoreElement = targetCell.querySelector('.score');
+                            const score = microgame.logic.call(targetCell);
+                            scoreElement.textContent = score;
+                        }
+                    });
+                }
+            });
+            return cell;
+        }
+
+        // Populate grid with microgames
+        microgames.forEach((microgame) => {
+            const cell = createMicrogameCell(microgame);
+            gridContainer.appendChild(cell);
+        });
+
+        // Keyboard navigation
+        gridContainer.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp') {
+                const currentCell = document.activeElement;
+                const previousCell = currentCell.previousElementSibling;
+                if (previousCell) {
+                    previousCell.focus();
+                }
+            } else if (e.key === 'ArrowDown') {
+                const currentCell = document.activeElement;
+                const nextCell = currentCell.nextElementSibling;
+                if (nextCell) {
+                    nextCell.focus();
+                }
+            } else if (e.key === 'ArrowLeft') {
+                const currentCell = document.activeElement;
+                const previousCell = currentCell.previousElementSibling;
+                if (previousCell) {
+                    previousCell.focus();
+                }
+            } else if (e.key === 'ArrowRight') {
+                const currentCell = document.activeElement;
+                const nextCell = currentCell.nextElementSibling;
+                if (nextCell) {
+                    nextCell.focus();
+                }
+            }
+        });
+
+        // Persist grid layout and microgame states
+        function saveState() {
+            const gridLayout = Array.from(gridContainer.children).map((cell) => cell.innerHTML);
+            const microgameStates = Array.from(gridContainer.children).map((cell) => {
+                const scoreElement = cell.querySelector('.score');
+                return scoreElement.textContent;
+            });
+            localStorage.setItem('gridLayout', JSON.stringify(gridLayout));
+            localStorage.setItem('microgameStates', JSON.stringify(microgameStates));
+        }
+
+        function loadState() {
+            const storedGridLayout = localStorage.getItem('gridLayout');
+            const storedMicrogameStates = localStorage.getItem('microgameStates');
+            if (storedGridLayout && storedMicrogameStates) {
+                const gridLayout = JSON.parse(storedGridLayout);
+                const microgameStates = JSON.parse(storedMicrogameStates);
+                gridContainer.innerHTML = '';
+                gridLayout.forEach((cellHtml) => {
+                    const cell = document.createElement('div');
+                    cell.classList.add('microgame');
+                    cell.innerHTML = cellHtml;
+                    gridContainer.appendChild(cell);
+                });
+                microgameStates.forEach((state, index) => {
+                    const scoreElement = gridContainer.children[index].querySelector('.score');
+                    scoreElement.textContent = state;
+                });
+            }
+        }
+
+        loadState();
+
+        // Global scoreboard
+        function updateScoreboard() {
+            const scoreboardBody = document.getElementById('scoreboardBody');
+            scoreboardBody.innerHTML = '';
+            microgames.forEach((microgame, index) => {
+                const scoreElement = gridContainer.children[index].querySelector('.score');
+                const score = scoreElement.textContent;
+                const row = document.createElement('tr');
+                const microgameCell = document.createElement('td');
+                microgameCell.textContent = microgame.name;
+                const scoreCell = document.createElement('td');
+                scoreCell.textContent = score;
+                row.appendChild(microgameCell);
+                row.appendChild(scoreCell);
+                scoreboardBody.appendChild(row);
+            });
+        }
+
+        // JSON export/import
+        function exportState() {
+            const gridLayout = Array.from(gridContainer.children).map((cell) => cell.innerHTML);
+            const microgameStates = Array.from(gridContainer.children).map((cell) => {
+                const scoreElement = cell.querySelector('.score');
+                return scoreElement.textContent;
+            });
+            const appState = {
+                gridLayout,
+                microgameStates
+            };
+            const json = JSON.stringify(appState);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'microgrid_duel_state.json';
+            a.click();
+        }
+
+        function importState() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'application/json';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const json = e.target.result;
+                    const appState = JSON.parse(json);
+                    gridContainer.innerHTML = '';
+                    appState.gridLayout.forEach((cellHtml) => {
+                        const cell = document.createElement('div');
+                        cell.classList.add('microgame');
+                        cell.innerHTML = cellHtml;
+                        gridContainer.appendChild(cell);
+                    });
+                    appState.microgameStates.forEach((state, index) => {
+                        const scoreElement = gridContainer.children[index].querySelector('.score');
+                        scoreElement.textContent = state;
+                    });
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        // Event listeners for saving and loading state
+        window.addEventListener('beforeunload', saveState);
+
+        // Update scoreboard on each microgame interaction
+        gridContainer.addEventListener('click', updateScoreboard);
+        gridContainer.addEventListener('keydown', updateScoreboard);
+
+        // Add export/import buttons
+        const exportButton = document.createElement('button');
+        exportButton.textContent = 'Export State';
+        exportButton.onclick = exportState;
+        document.body.appendChild(exportButton);
+
+        const importButton = document.createElement('button');
+        importButton.textContent = 'Import State';
+        importButton.onclick = importState;
+        document.body.appendChild(importButton);
+    </script>
+</body>
+</html>
