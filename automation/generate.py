@@ -1,4 +1,4 @@
-import os, json, pathlib, re, datetime, requests, sys, random, unicodedata
+import os, json, pathlib, re, datetime, requests, sys, random, unicodedata, tempfile, ast, html
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -6,7 +6,7 @@ API_URL = "https://api.perplexity.ai/chat/completions"
 MODEL = os.getenv("PPLX_MODEL", "sonar")
 TIMEOUT = int(os.getenv("PPLX_TIMEOUT", "300"))
 
-# Folders: versioned artifacts (no timestamps) + "latest" convenience copies
+# Folders: versioned artifacts + "latest" convenience copies
 DIST = pathlib.Path("dist")
 PROMPTS_DIR = DIST / "prompts"
 APPS_DIR = DIST / "apps"
@@ -16,6 +16,7 @@ LOG_OUT = DIST / "log.txt"
 # --- Tunables ---
 PROMPT_TEMPERATURE = 0.8
 BUILD_TEMPERATURE  = 0.3
+MAX_RESPONSE_CHARS = 800_000  # hard cap to avoid runaway responses
 
 THEMES = [
     "personal productivity", "learning & study tools", "health & wellness",
@@ -31,7 +32,7 @@ FEATURE_EXTRAS = [
 ]
 
 SYSTEM_PROMPT_GEN = """You are a senior product spec writer.
-Task: Produce a concise, *buildable* prompt for a small single-file app.
+Task: Produce a concise, buildable prompt for a small single-file app.
 Requirements:
 - The output MUST be PLAIN TEXT only (no code fences or commentary).
 - Title on the first line. Then a clear bulleted spec.
@@ -74,6 +75,13 @@ OR
 Implement exactly the user's spec. Keep the code concise and readable.
 """
 
+SYSTEM_FIX = """You are a corrective code editor.
+Given BROKEN content and a TARGET_KIND ('html' or 'py'), return ONLY a fixed version that:
+- For html: starts with <!DOCTYPE html>, contains <html>, <head>, <body>, inline CSS/JS only, no external refs.
+- For py: valid Python 3 single-file script using stdlib only; compiles under ast.parse().
+Do not explain anything. Output ONLY the corrected file content.
+"""
+
 def _session_with_retries() -> requests.Session:
     s = requests.Session()
     retry = Retry(
@@ -88,71 +96,116 @@ def _session_with_retries() -> requests.Session:
     s.mount("http://", adapter)
     return s
 
-def pplx_chat(messages, api_key, temperature, timeout=TIMEOUT):
+def write_text_atomic(path: pathlib.Path, content: str):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8", dir=str(path.parent)) as tf:
+        tf.write(content)
+        tmp_name = tf.name
+    os.replace(tmp_name, path)
+
+def read_text_safe(path: pathlib.Path) -> str:
+    return path.read_text(encoding="utf-8") if path.exists() else ""
+
+def write_log(line: str):
+    DIST.mkdir(parents=True, exist_ok=True)
+    prev = read_text_safe(LOG_OUT)
+    write_text_atomic(LOG_OUT, prev + line + "\n")
+
+def pplx_chat(messages, api_key, temperature, timeout=TIMEOUT) -> str:
     sess = _session_with_retries()
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     payload = {"model": MODEL, "temperature": float(temperature), "messages": messages}
     resp = sess.post(API_URL, headers=headers, data=json.dumps(payload), timeout=(15, timeout))
-    resp.raise_for_status()
-    data = resp.json()
-    return data["choices"][0]["message"]["content"]
+    try:
+        resp.raise_for_status()
+    except requests.HTTPError as e:
+        raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:600]}") from e
+    try:
+        data = resp.json()
+    except Exception as e:
+        raise RuntimeError(f"Non-JSON response: {resp.text[:600]}") from e
+    if "choices" not in data or not data["choices"]:
+        raise RuntimeError(f"Malformed API reply (missing choices): {data}")
+    content = data["choices"][0]["message"].get("content", "")
+    if not isinstance(content, str) or not content.strip():
+        raise RuntimeError("Empty content from API.")
+    if len(content) > MAX_RESPONSE_CHARS:
+        content = content[:MAX_RESPONSE_CHARS]
+    return content
 
 def strip_code_fences(text: str) -> str:
-    """Remove markdown code fences if present."""
     fence = re.search(r"```(?:\w+)?\s*(.*?)\s*```", text, re.DOTALL | re.IGNORECASE)
     return fence.group(1) if fence else text
 
 def extract_html_or_python(raw: str) -> tuple[str, str]:
     """
     Return (content, kind) where kind is 'html' or 'py'.
-    Detect by markers; default to 'html' if <!DOCTYPE or <html> found, else 'py' when it
-    looks like Python (imports/def/class/if __name__ guard).
     """
-    text = strip_code_fences(raw)
-
-    # Heuristics
+    text = strip_code_fences(raw).strip()
     lower = text.lower()
     if "<!doctype html>" in lower or "<html" in lower:
         return text, "html"
-
     py_markers = (
         r"\bimport\b", r"\bfrom\b\s+\w+\s+\bimport\b",
         r"\bdef\s+\w+\(", r"\bclass\s+\w+\(", r"if\s+__name__\s*==\s*['\"]__main__['\"]"
     )
     if any(re.search(p, text) for p in py_markers):
         return text, "py"
-
-    # Fallback: if it starts with <!DOCTYPE or <...> treat as html, otherwise python
-    if text.strip().startswith("<"):
+    if text.startswith("<"):
         return text, "html"
     return text, "py"
 
-def enforce_single_file_html(html: str) -> str:
-    # Ensure <!DOCTYPE html>
-    if "<!doctype html>" not in html.lower():
-        if "<html" not in html.lower():
-            html = f"<!DOCTYPE html>\n<html><head><meta charset='utf-8'><title>App</title></head><body>\n{html}\n</body></html>"
+def enforce_single_file_html(html_text: str) -> str:
+    t = html_text
+    if "<!doctype html>" not in t.lower():
+        if "<html" not in t.lower():
+            t = f"<!DOCTYPE html>\n<html><head><meta charset='utf-8'><title>App</title></head><body>\n{t}\n</body></html>"
         else:
-            html = "<!DOCTYPE html>\n" + html
-    # Remove external refs to enforce single-file
-    html = re.sub(r'<script[^>]+src=["\'][^"\']+["\'][^>]*></script>', "", html, flags=re.IGNORECASE)
-    html = re.sub(r'<link[^>]+rel=["\']stylesheet["\'][^>]*>', "", html, flags=re.IGNORECASE)
-    # Stamp time (as a comment) for traceability (does not affect filename)
+            t = "<!DOCTYPE html>\n" + t
+    # viewport + charset + minimal title
+    if "<head" in t.lower():
+        t = re.sub(r"(?i)<head>", "<head>\n<meta charset='utf-8'>\n<meta name='viewport' content='width=device-width,initial-scale=1'>\n", t, count=1)
+    # Remove external refs
+    t = re.sub(r'<script[^>]+src=["\'][^"\']+["\'][^>]*>\s*</script>', "", t, flags=re.IGNORECASE)
+    t = re.sub(r'<link[^>]+rel=["\']stylesheet["\'][^>]*>', "", t, flags=re.IGNORECASE)
+    # Stamp (comment)
     stamp = f"<!-- Auto-generated via Perplexity on {datetime.datetime.utcnow().isoformat()}Z -->"
-    html = re.sub(r"(?i)<head>", f"<head>\n{stamp}\n", html, count=1)
-    if stamp not in html:
-        html = stamp + "\n" + html
-    return html
+    if stamp not in t:
+        if "<head" in t.lower():
+            t = re.sub(r"(?i)<head>", f"<head>\n{stamp}\n", t, count=1)
+        else:
+            t = stamp + "\n" + t
+    return t
 
-def add_python_stamp(py: str) -> str:
+def add_python_stamp(py_text: str) -> str:
     stamp = f"# Auto-generated via Perplexity on {datetime.datetime.utcnow().isoformat()}Z"
-    # Prepend if not already present
-    if not py.lstrip().startswith("# Auto-generated via Perplexity"):
-        return stamp + "\n" + py
-    return py
+    if not py_text.lstrip().startswith("# Auto-generated via Perplexity"):
+        return stamp + "\n" + py_text
+    return py_text
+
+def validate_html(text: str) -> tuple[bool, str]:
+    lower = text.lower()
+    problems = []
+    if not lower.startswith("<!doctype html"):
+        problems.append("Missing <!DOCTYPE html> at top.")
+    for tag in ("<html", "<head", "<body"):
+        if tag not in lower:
+            problems.append(f"Missing required tag: {tag}>")
+    # Quick sanity: no <script src=...> or <link rel=stylesheet>
+    if re.search(r'<script[^>]+src=', lower):
+        problems.append("External <script src> found (must be inline).")
+    if re.search(r'<link[^>]+rel=["\']stylesheet', lower):
+        problems.append("External <link rel=stylesheet> found (must be inline).")
+    return (len(problems) == 0, "; ".join(problems))
+
+def validate_python(text: str) -> tuple[bool, str]:
+    try:
+        ast.parse(text)
+        return True, ""
+    except SyntaxError as e:
+        return False, f"Python syntax error: {e}"
 
 def slugify(text: str) -> str:
-    # Normalize, remove accents, keep alphanum and dashes, collapse spaces
     text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
     text = re.sub(r"[^\w\s-]", "", text).strip().lower()
     text = re.sub(r"[\s_-]+", "-", text)
@@ -164,20 +217,7 @@ def first_line_title(prompt_text: str) -> str:
             return line.strip()
     return "app"
 
-def write_text(path: pathlib.Path, content: str):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
-
-def write_log(line: str):
-    DIST.mkdir(parents=True, exist_ok=True)
-    prev = LOG_OUT.read_text(encoding="utf-8") if LOG_OUT.exists() else ""
-    LOG_OUT.write_text(prev + line + "\n", encoding="utf-8")
-
 def unique_path(base: pathlib.Path) -> pathlib.Path:
-    """
-    If base exists, append -2, -3, ... before the suffix until free.
-    Example: smart-todo.html, smart-todo-2.html, smart-todo-3.html
-    """
     if not base.exists():
         return base
     stem, suffix = base.stem, base.suffix
@@ -188,17 +228,63 @@ def unique_path(base: pathlib.Path) -> pathlib.Path:
             return candidate
         i += 1
 
+def save_latest(kind: str, content: str):
+    if kind == "html":
+        write_text_atomic(LATEST_DIR / "app.html", content)
+        # Remove stale other type if present
+        py = LATEST_DIR / "app.py"
+        if py.exists(): py.unlink()
+    else:
+        write_text_atomic(LATEST_DIR / "app.py", content)
+        h = LATEST_DIR / "app.html"
+        if h.exists(): h.unlink()
+
+def build_once(prompt_text: str, api_key: str, temperature: float):
+    raw = pplx_chat(
+        messages=[{"role": "system", "content": SYSTEM_BUILD},
+                  {"role": "user", "content": prompt_text}],
+        api_key=api_key,
+        temperature=temperature,
+    )
+    content, kind = extract_html_or_python(raw)
+    if kind == "html":
+        content = enforce_single_file_html(content)
+        ok, err = validate_html(content)
+    else:
+        content = add_python_stamp(content)
+        ok, err = validate_python(content)
+    return ok, err, content, kind, raw
+
+def attempt_fix(broken: str, target_kind: str, api_key: str):
+    """Ask model once to fix the broken content."""
+    fixed = pplx_chat(
+        messages=[
+            {"role": "system", "content": SYSTEM_FIX},
+            {"role": "user", "content": f"TARGET_KIND={target_kind}\n\nBROKEN:\n{broken}"}
+        ],
+        api_key=api_key,
+        temperature=0.1,
+    )
+    content, kind_detected = extract_html_or_python(fixed)
+    # Force expected kind when needed
+    if target_kind == "html":
+        content = enforce_single_file_html(content)
+        ok, err = validate_html(content)
+    else:
+        content = add_python_stamp(content)
+        ok, err = validate_python(content)
+    return ok, err, content, target_kind
+
 def main():
     api_key = os.getenv("PPLX_API_KEY")
     if not api_key:
         print("Missing PPLX_API_KEY secret", file=sys.stderr)
         sys.exit(1)
 
-    # Timestamps for logs (not filenames)
     now = datetime.datetime.utcnow()
     utc_now = now.isoformat() + "Z"
 
-    # Randomization seeds for prompt diversity
+    # Randomization inputs for prompt diversity
     seed = random.randint(10_000, 99_999)
     theme = random.choice(THEMES)
     extras = ", ".join(random.sample(FEATURE_EXTRAS, k=3))
@@ -216,12 +302,16 @@ def main():
             ],
             api_key=api_key,
             temperature=PROMPT_TEMPERATURE,
-        )
+        ).strip()
+        # Basic sanity: must be plain text, no code fences
+        prompt_text = strip_code_fences(prompt_text).strip()
+        if not prompt_text or "\n" not in prompt_text:
+            raise RuntimeError("Prompt looked empty or lacked a title + spec lines.")
         title = first_line_title(prompt_text)
         slug = slugify(title)
         prompt_path = unique_path(PROMPTS_DIR / f"{slug}.txt")
-        write_text(prompt_path, prompt_text.strip() + f"\n\n(Generated: {utc_now}, seed={seed}, theme={theme}, extras={extras})\n")
-        write_text(LATEST_DIR / "prompt.txt", prompt_text.strip())
+        write_text_atomic(prompt_path, prompt_text + f"\n\n(Generated: {utc_now}, seed={seed}, theme={theme}, extras={extras})\n")
+        write_text_atomic(LATEST_DIR / "prompt.txt", prompt_text)
         print(f"Wrote {prompt_path}")
         write_log(f"[{utc_now}] Prompt OK  seed={seed}  theme={theme}  extras={extras}  title='{title}'  slug={slug}")
     except Exception as e:
@@ -230,40 +320,35 @@ def main():
         write_log(err)
         sys.exit(1)
 
-    # ----- Stage 2: Build the app (HTML or Python) from the prompt -----
+    # ----- Stage 2: Build the app; validate; auto-fix once if needed -----
     try:
-        raw = pplx_chat(
-            messages=[
-                {"role": "system", "content": SYSTEM_BUILD},
-                {"role": "user", "content": prompt_text},
-            ],
-            api_key=api_key,
-            temperature=BUILD_TEMPERATURE,
-        )
-        content, kind = extract_html_or_python(raw)
+        ok, err, content, kind, raw = build_once(prompt_text, api_key, BUILD_TEMPERATURE)
+        tried_fix = False
+        if not ok:
+            write_log(f"[{utc_now}] Build validation failed ({kind}): {err}. Attempting auto-fix.")
+            ok, err, content, kind = attempt_fix(raw, kind, api_key)
+            tried_fix = True
 
+        if not ok:
+            raise RuntimeError(f"Final {kind} validation failed after {'fix ' if tried_fix else ''}attempt: {err}")
+
+        # Save versioned + latest
         if kind == "html":
-            content = enforce_single_file_html(content)
             base = APPS_DIR / f"{slug}.html"
-            app_path = unique_path(base)
-            write_text(app_path, content)
-            write_text(LATEST_DIR / "app.html", content)
         else:
-            content = add_python_stamp(content)
             base = APPS_DIR / f"{slug}.py"
-            app_path = unique_path(base)
-            write_text(app_path, content)
-            write_text(LATEST_DIR / "app.py", content)
+        app_path = unique_path(base)
+        write_text_atomic(app_path, content)
+        save_latest(kind, content)
 
         print(f"Wrote {app_path}")
-        write_log(f"[{utc_now}] Build OK  file={app_path.name}  kind={kind}")
+        write_log(f"[{utc_now}] Build OK  file={app_path.name}  kind={kind}  {'(after auto-fix)' if tried_fix else ''}")
+        print(f"Done.\nSaved:\n  - {prompt_path}\n  - {app_path}\nLatest copies updated in {LATEST_DIR}")
     except Exception as e:
         err = f"[{utc_now}] Build FAILED: {type(e).__name__}: {e}"
         print(err, file=sys.stderr)
         write_log(err)
         sys.exit(1)
-
-    print(f"Done.\nSaved:\n  - {prompt_path}\n  - {app_path}\nLatest copies updated in {LATEST_DIR}")
 
 if __name__ == "__main__":
     main()
