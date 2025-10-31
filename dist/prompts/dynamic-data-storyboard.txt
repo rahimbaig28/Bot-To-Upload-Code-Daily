@@ -11,3 +11,5 @@ Dynamic Data Storyboard
 - Responsive layout adapting to mobile and desktop screens.
 - Provides a simple color palette selector to customize visualization colors for accessibility.
 - Includes a minimal tutorial overlay accessible via a help button to guide new users through features.
+
+(Generated: 2025-10-31T13:26:48.534601Z, seed=85856, theme=data visualization, extras=ARIA-compliant components, export/import JSON, offline-first with localStorage)
