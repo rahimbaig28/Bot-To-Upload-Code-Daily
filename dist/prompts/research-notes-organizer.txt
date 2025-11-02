@@ -23,3 +23,5 @@ Research Notes Organizer
 - Limitations:
   - Entire app must fit within a single HTML file under ~1000 lines.
   - No backend or server dependencies; all data managed client-side.
+
+(Generated: 2025-11-02T13:20:10.994220Z, seed=89997, theme=research utilities, extras=share via URL hash, ARIA-compliant components, export/import JSON)
