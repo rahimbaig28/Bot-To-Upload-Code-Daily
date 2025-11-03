@@ -20,3 +20,5 @@ Research Insight Collector
   - Efficient DOM updates for search/filter/sort operations without page reload.
 - No backend or external calls; fully client-side.
 - Save and restore all user data and UI state (notes, tags, filters, sorting) across browser sessions using localStorage.
+
+(Generated: 2025-11-03T13:27:26.864757Z, seed=78883, theme=research utilities, extras=ARIA-compliant components, offline-first with localStorage, share via URL hash)
