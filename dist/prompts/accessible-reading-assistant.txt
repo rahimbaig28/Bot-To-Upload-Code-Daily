@@ -23,3 +23,5 @@ Accessible Reading Assistant
   - Load plain text or pasted content for reading and customization.
   - Clear reset option to default settings.
   - Optional line-by-line auto-scrolling mode for hands-free reading, controllable via keyboard.
+
+(Generated: 2025-11-05T13:29:00.603450Z, seed=35074, theme=accessibility helpers, extras=keyboard-first UX, share via URL hash, export/import JSON)
