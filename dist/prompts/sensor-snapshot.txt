@@ -17,3 +17,5 @@ Sensor Snapshot
 - All text and UI elements support i18n placeholders.
 - Clear error states: invalid input, failed localStorage, etc.
 - Testable features: location persistence, keyboard toggling, print view, PNG export, theme switch, help tooltip.
+
+(Generated: 2025-11-07T13:25:08.387751Z, seed=30544, theme=data visualization, extras=keyboard-first UX, ARIA-compliant components, print-friendly view)
