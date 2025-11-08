@@ -8,3 +8,5 @@ Research Notes Organizer
 - Implement a dark/light theme toggle that remembers user preference and auto-switches based on system preference by default.
 - Ensure full keyboard navigation: tab through notes, use Enter to edit, Escape to cancel, and Delete to remove.
 - All code (HTML, CSS, JS) must be in one file; no external libraries or files.
+
+(Generated: 2025-11-08T13:20:38.241888Z, seed=27991, theme=research utilities, extras=print-friendly view, offline-first with localStorage, dark/light auto theme)
