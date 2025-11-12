@@ -31,3 +31,5 @@ ACCEPTANCE CRITERIA
 - Print view removes navigation, adjusts colors to grayscale, maintains chart readability
 - All buttons and dropdowns keyboard-accessible; Tab order logical
 - ARIA labels prevent screen reader confusion on dynamic content
+
+(Generated: 2025-11-12T13:29:46.936066Z, seed=33255, theme=data visualization, extras=print-friendly view, dark/light auto theme, ARIA-compliant components)
