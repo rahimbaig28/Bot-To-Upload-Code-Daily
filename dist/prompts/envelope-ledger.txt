@@ -15,3 +15,5 @@ Envelope Ledger
 - Simple form to add new envelopes with name and initial allocation; form validation prevents empty names or negative amounts
 - Persistent data: all envelopes, allocations, and transactions saved to browser localStorage; survives page refresh
 - Footer shows last updated timestamp and data size indicator
+
+(Generated: 2025-11-15T13:20:52.829894Z, seed=76115, theme=finance & budgeting, extras=responsive grid, drag-and-drop, dark/light auto theme)

@@ -34,3 +34,5 @@
 [2025-11-13T13:29:34.995772Z] Build OK  file=research-reference-grid.html  kind=html  
 [2025-11-14T13:26:40.964829Z] Prompt OK  seed=13229  theme=personal productivity  extras=keyboard-first UX, offline-first with localStorage, responsive grid  title='Daily Momentum Log'  slug=daily-momentum-log
 [2025-11-14T13:26:40.964829Z] Build OK  file=daily-momentum-log.html  kind=html  
+[2025-11-15T13:20:52.829894Z] Prompt OK  seed=76115  theme=finance & budgeting  extras=responsive grid, drag-and-drop, dark/light auto theme  title='Envelope Ledger'  slug=envelope-ledger
+[2025-11-15T13:20:52.829894Z] Build OK  file=envelope-ledger.html  kind=html  
